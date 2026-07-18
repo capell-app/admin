@@ -20,7 +20,6 @@ use Capell\Admin\Console\Commands\SyncPermissionsCommand;
 use Capell\Admin\Console\Commands\UpgradeCommand;
 use Capell\Admin\Console\Commands\ValidateThemesCommand;
 use Capell\Admin\Contracts\Backup\PageExporter;
-use Capell\Admin\Contracts\Bridges\AdminBridge;
 use Capell\Admin\Contracts\Bridges\UserResourceBridge;
 use Capell\Admin\Contracts\Dashboard\ContentHealthDataProvider;
 use Capell\Admin\Contracts\Dashboard\MyWorkQueueDataProvider;
@@ -51,18 +50,10 @@ use Capell\Admin\Facades\CapellAdmin;
 use Capell\Admin\Filament\Imports\RedirectImporter;
 use Capell\Admin\Filament\Livewire\PublishStatusPanel;
 use Capell\Admin\Filament\Pages\Reports\AccessibilityReadinessReport;
-use Capell\Admin\Filament\Pages\Reports\BlueprintSchemaDriftReport;
-use Capell\Admin\Filament\Pages\Reports\CacheFreshnessReport;
-use Capell\Admin\Filament\Pages\Reports\ContentIntegrityReport;
 use Capell\Admin\Filament\Pages\Reports\DemoInstallHealthReport;
-use Capell\Admin\Filament\Pages\Reports\LayoutWidgetUsageReport;
-use Capell\Admin\Filament\Pages\Reports\NavigationCoverageReport;
 use Capell\Admin\Filament\Pages\Reports\PackageReadinessReport;
-use Capell\Admin\Filament\Pages\Reports\PermissionsAccessSurfaceReport;
 use Capell\Admin\Filament\Pages\Reports\PublicRenderSafetyReport;
 use Capell\Admin\Filament\Pages\Reports\PublishingReadinessReport;
-use Capell\Admin\Filament\Pages\Reports\SiteLanguageCoverageReport;
-use Capell\Admin\Filament\Pages\Reports\UrlHealthReport;
 use Capell\Admin\Filament\Resources\Redirects\Pages\ManageRedirects;
 use Capell\Admin\Filament\Resources\Redirects\RedirectResource;
 use Capell\Admin\Filament\Settings\AdminSettingsSchema;
@@ -340,7 +331,6 @@ class AdminServiceProvider extends AbstractPackageServiceProvider
             ->registerPages()
             ->registerCoreReports()
             ->registerResources()
-            ->registerOptionalAdminBridges()
             ->registerWidgets()
             ->registerDashboardFilamentWidgets()
             ->registerOverviewStats();
@@ -490,22 +480,6 @@ class AdminServiceProvider extends AbstractPackageServiceProvider
             ->values();
     }
 
-    private function registerOptionalAdminBridges(): self
-    {
-        $this->registerOptionalAdminBridge('Capell\\HtmlCache\\Support\\Bridges\\HtmlCacheAdminBridge');
-
-        return $this;
-    }
-
-    private function registerOptionalAdminBridge(string $bridgeClass): void
-    {
-        if (! is_subclass_of($bridgeClass, AdminBridge::class)) {
-            return;
-        }
-
-        CapellAdmin::registerAdminBridge(static::$packageName, $bridgeClass);
-    }
-
     private function registerPages(): self
     {
         foreach (PageEnum::cases() as $pageEnum) {
@@ -529,36 +503,6 @@ class AdminServiceProvider extends AbstractPackageServiceProvider
     {
         return [
             new ReportDefinitionData(
-                key: ContentIntegrityReport::REPORT_KEY,
-                label: 'capell-admin::reports.content_integrity_label',
-                description: 'capell-admin::reports.content_integrity_description',
-                package: static::$packageName,
-                category: 'capell-admin::reports.category_content',
-                pageClass: ContentIntegrityReport::class,
-                navigationSort: 10,
-                capabilityTags: ['content', 'integrity'],
-            ),
-            new ReportDefinitionData(
-                key: SiteLanguageCoverageReport::REPORT_KEY,
-                label: 'capell-admin::reports.site_language_coverage_label',
-                description: 'capell-admin::reports.site_language_coverage_description',
-                package: static::$packageName,
-                category: 'capell-admin::reports.category_content',
-                pageClass: SiteLanguageCoverageReport::class,
-                navigationSort: 20,
-                capabilityTags: ['sites', 'languages'],
-            ),
-            new ReportDefinitionData(
-                key: UrlHealthReport::REPORT_KEY,
-                label: 'capell-admin::reports.url_health_label',
-                description: 'capell-admin::reports.url_health_description',
-                package: static::$packageName,
-                category: 'capell-admin::reports.category_content',
-                pageClass: UrlHealthReport::class,
-                navigationSort: 30,
-                capabilityTags: ['urls', 'health'],
-            ),
-            new ReportDefinitionData(
                 key: AccessibilityReadinessReport::REPORT_KEY,
                 label: 'capell-admin::reports.accessibility_readiness_label',
                 description: 'capell-admin::reports.accessibility_readiness_description',
@@ -569,26 +513,6 @@ class AdminServiceProvider extends AbstractPackageServiceProvider
                 capabilityTags: ['accessibility', 'languages', 'media'],
             ),
             new ReportDefinitionData(
-                key: LayoutWidgetUsageReport::REPORT_KEY,
-                label: 'capell-admin::reports.layout_widget_usage_label',
-                description: 'capell-admin::reports.layout_widget_usage_description',
-                package: static::$packageName,
-                category: 'capell-admin::reports.category_structure',
-                pageClass: LayoutWidgetUsageReport::class,
-                navigationSort: 40,
-                capabilityTags: ['layouts', 'widgets'],
-            ),
-            new ReportDefinitionData(
-                key: BlueprintSchemaDriftReport::REPORT_KEY,
-                label: 'capell-admin::reports.blueprint_schema_drift_label',
-                description: 'capell-admin::reports.blueprint_schema_drift_description',
-                package: static::$packageName,
-                category: 'capell-admin::reports.category_structure',
-                pageClass: BlueprintSchemaDriftReport::class,
-                navigationSort: 50,
-                capabilityTags: ['blueprints', 'schemas'],
-            ),
-            new ReportDefinitionData(
                 key: PublishingReadinessReport::REPORT_KEY,
                 label: 'capell-admin::reports.publishing_readiness_label',
                 description: 'capell-admin::reports.publishing_readiness_description',
@@ -597,36 +521,6 @@ class AdminServiceProvider extends AbstractPackageServiceProvider
                 pageClass: PublishingReadinessReport::class,
                 navigationSort: 60,
                 capabilityTags: ['publishing', 'workflow'],
-            ),
-            new ReportDefinitionData(
-                key: CacheFreshnessReport::REPORT_KEY,
-                label: 'capell-admin::reports.cache_freshness_label',
-                description: 'capell-admin::reports.cache_freshness_description',
-                package: static::$packageName,
-                category: 'capell-admin::reports.category_operations',
-                pageClass: CacheFreshnessReport::class,
-                navigationSort: 70,
-                capabilityTags: ['cache', 'freshness'],
-            ),
-            new ReportDefinitionData(
-                key: NavigationCoverageReport::REPORT_KEY,
-                label: 'capell-admin::reports.navigation_coverage_label',
-                description: 'capell-admin::reports.navigation_coverage_description',
-                package: static::$packageName,
-                category: 'capell-admin::reports.category_structure',
-                pageClass: NavigationCoverageReport::class,
-                navigationSort: 80,
-                capabilityTags: ['navigation', 'coverage'],
-            ),
-            new ReportDefinitionData(
-                key: PermissionsAccessSurfaceReport::REPORT_KEY,
-                label: 'capell-admin::reports.permissions_access_surface_label',
-                description: 'capell-admin::reports.permissions_access_surface_description',
-                package: static::$packageName,
-                category: 'capell-admin::reports.category_security',
-                pageClass: PermissionsAccessSurfaceReport::class,
-                navigationSort: 90,
-                capabilityTags: ['permissions', 'security'],
             ),
             new ReportDefinitionData(
                 key: DemoInstallHealthReport::REPORT_KEY,
@@ -967,7 +861,6 @@ class AdminServiceProvider extends AbstractPackageServiceProvider
             serviceProviderClass: static::class,
             path: dirname(__DIR__, 2),
             version: CapellCore::getInstalledPrettyVersion(static::$packageName),
-            setting: AdminSettings::class,
             setupCommand: 'capell:admin-setup',
             setupParams: [
                 'url',
