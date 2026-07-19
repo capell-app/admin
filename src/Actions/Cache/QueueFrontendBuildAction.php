@@ -29,7 +29,7 @@ final class QueueFrontendBuildAction
                 'queued_at' => now()->toIso8601String(),
             ], RunFrontendBuildJob::STATUS_TTL_SECONDS);
 
-            dispatch(new RunFrontendBuildJob);
+            RunFrontendBuildJob::dispatch();
 
             return true;
         });

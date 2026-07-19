@@ -21,7 +21,7 @@ final class UserMenuItemResolver
     public function resolve(array $definitions, ?Authenticatable $user, int $generation): array
     {
         $cacheKey = $generation . ':' . ($user instanceof Authenticatable
-            ? $user::class . ':' . $user->getAuthIdentifier()
+            ? $user::class . ':' . (string) $user->getAuthIdentifier()
             : 'guest');
 
         return $this->resolvedItems[$cacheKey] ??= ResolveUserMenuItemsAction::run(

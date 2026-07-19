@@ -94,7 +94,7 @@ final class ExtensionsPageActionRegistry
 
         if ($clone instanceof ActionGroup) {
             $clone->actions(array_map(
-                $this->cloneAction(...),
+                fn (Action|ActionGroup $groupedAction): Action|ActionGroup => $this->cloneAction($groupedAction),
                 $clone->getActions(),
             ));
         }
