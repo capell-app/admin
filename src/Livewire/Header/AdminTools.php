@@ -10,6 +10,7 @@ use Capell\Admin\Actions\DeactivateLockdownAction;
 use Capell\Admin\Contracts\AdminTools\AdminToolItem;
 use Capell\Admin\Enums\ListenerEnum;
 use Capell\Admin\Support\AdminTools\AdminToolRegistry;
+use Capell\Core\Exceptions\QueueConnectionNotReadyException;
 use Capell\Core\Facades\CapellCore;
 use Capell\Core\Models\Page;
 use Capell\Core\Support\Security\LockdownStore;
@@ -65,13 +66,24 @@ class AdminTools extends Component
     {
         $this->assertGlobalAdmin();
 
-        $queued = QueueFrontendBuildAction::run();
+        try {
+            $result = QueueFrontendBuildAction::run();
+        } catch (QueueConnectionNotReadyException $queueConnectionNotReadyException) {
+            $this->successResponse(
+                name: 'build_frontend',
+                title: __('capell-admin::message.frontend_build_queue_unavailable'),
+                body: $queueConnectionNotReadyException->getMessage(),
+                type: 'danger',
+            );
+
+            return;
+        }
 
         $this->successResponse(
             name: 'build_frontend',
-            title: __($queued ? 'capell-admin::message.frontend_build_queued' : 'capell-admin::message.frontend_build_already_running'),
+            title: $result->getLabel(),
             body: __('capell-admin::message.frontend_build_queued_body'),
-            type: $queued ? 'success' : 'warning',
+            type: $result->queued() ? 'success' : 'warning',
         );
     }
 

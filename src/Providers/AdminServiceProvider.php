@@ -111,6 +111,7 @@ use Capell\Admin\Support\Activity\EventSourcedActivityRevertHandler;
 use Capell\Admin\Support\AdminEventRegistry;
 use Capell\Admin\Support\AdminEventRouter;
 use Capell\Admin\Support\AdminResourceResolver;
+use Capell\Admin\Support\AdminRuntimeActivator;
 use Capell\Admin\Support\AdminSurfaceContributionCache;
 use Capell\Admin\Support\AdminSurfaceContributionRegistry;
 use Capell\Admin\Support\Backup\NullPageExporter;
@@ -345,17 +346,23 @@ class AdminServiceProvider extends AbstractPackageServiceProvider
             ));
         });
 
-        $this
-            ->registerAdminPackageMetadata()
-            ->registerMacros()
-            ->registerAssets()
-            ->registerNotificationGroups()
-            ->registerPages()
-            ->registerCoreReports()
-            ->registerResources()
-            ->registerWidgets()
-            ->registerDashboardFilamentWidgets()
-            ->registerOverviewStats();
+        $this->registerNotificationGroups();
+
+        $this->app->singleton(
+            AdminRuntimeActivator::class,
+            fn (): AdminRuntimeActivator => new AdminRuntimeActivator(
+                $this->app->make(AdminBridgeRegistry::class),
+                function (): void {
+                    $this->prepareAdminRuntime();
+                },
+                function (): void {
+                    $this->activateAdminRuntime();
+                },
+                function (string $packageName): void {
+                    CapellAdmin::bootAdminBridges($packageName);
+                },
+            ),
+        );
     }
 
     #[Override]
@@ -365,7 +372,6 @@ class AdminServiceProvider extends AbstractPackageServiceProvider
 
         return $this
             ->registerAboutInfo()
-            ->bootAdminBridges()
             ->registerWidgetComponents()
             ->registerBlazeOptimizedComponentViews()
             ->registerServingEvents()
@@ -381,6 +387,52 @@ class AdminServiceProvider extends AbstractPackageServiceProvider
             ->registerUpgradeNotificationSchedule()
             ->registerContentRetentionSchedule()
             ->registerModelObservers();
+    }
+
+    #[Override]
+    protected function packageSetupCommand(): string
+    {
+        return 'capell:admin-setup';
+    }
+
+    /** @return array<int, string> */
+    #[Override]
+    protected function packageSetupParameters(): array
+    {
+        return [
+            'url',
+            'user',
+            'languages',
+            'sites',
+            'assets',
+            'theme',
+            'skip-panel-integration',
+            'panel',
+            'configurators',
+            'no-colors',
+            'no-widgets',
+            'no-navigation',
+            'skip-permission-sync',
+            'force',
+        ];
+    }
+
+    private function prepareAdminRuntime(): self
+    {
+        return $this
+            ->registerMacros()
+            ->registerPages()
+            ->registerCoreReports()
+            ->registerResources()
+            ->registerWidgets()
+            ->registerDashboardFilamentWidgets()
+            ->registerOverviewStats();
+    }
+
+    private function activateAdminRuntime(): self
+    {
+        return $this
+            ->registerAssets();
     }
 
     private function registerResources(): self
@@ -587,13 +639,6 @@ class AdminServiceProvider extends AbstractPackageServiceProvider
         return $this;
     }
 
-    private function bootAdminBridges(): self
-    {
-        CapellAdmin::bootAdminBridges(static::$packageName);
-
-        return $this;
-    }
-
     private function registerDashboardFilamentWidgets(): self
     {
         $widgets = [
@@ -712,29 +757,6 @@ class AdminServiceProvider extends AbstractPackageServiceProvider
         return $this->registerBlazeOptimizedViews([
             __DIR__ . '/../../resources/views/components/alert.blade.php',
         ]);
-    }
-
-    private function registerAdminPackageMetadata(): self
-    {
-        return parent::registerPackageMetadata(
-            setupCommand: 'capell:admin-setup',
-            setupParams: [
-                'url',
-                'user',
-                'languages',
-                'sites',
-                'assets',
-                'theme',
-                'skip-panel-integration',
-                'panel',
-                'configurators',
-                'no-colors',
-                'no-widgets',
-                'no-navigation',
-                'skip-permission-sync',
-                'force',
-            ],
-        );
     }
 
     private function registerMacros(): self
