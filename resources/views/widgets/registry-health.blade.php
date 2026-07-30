@@ -40,9 +40,7 @@
                                 </div>
                             </div>
                         @empty
-                            <p class="px-2 py-1 text-xs text-gray-400">
-                                None registered
-                            </p>
+                            <p class="px-2 py-1 text-xs text-gray-400">None registered</p>
                         @endforelse
                     </div>
                 </details>

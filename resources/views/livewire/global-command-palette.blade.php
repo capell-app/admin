@@ -9,7 +9,7 @@
     x-on:keydown.ctrl.k.window="$wire.toggle()"
     x-on:keydown.escape.window="
         if (open) {
-            $wire.close()
+            $wire.close();
         }
     "
 >
@@ -47,7 +47,7 @@
                     x-init="
                         $watch('open', (value) => {
                             if (value) {
-                                $nextTick(() => $refs.paletteInput.focus())
+                                $nextTick(() => $refs.paletteInput.focus());
                             }
                         })
                     "

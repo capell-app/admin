@@ -10,9 +10,7 @@
             />
         @endif
 
-        <span class="inline-block">
-            {{ $sitemapPage->label }}
-        </span>
+        <span class="inline-block"> {{ $sitemapPage->label }} </span>
     </a>
 
     <a

@@ -14,9 +14,7 @@
         from the last visible row (the one immediately followed by the hidden field).
     --}}
     <style>
-        .page-title-with-slug-input
-            .fi-sc.fi-grid
-            > .fi-grid-col:has(+ .fi-grid-col.fi-hidden) {
+        .page-title-with-slug-input .fi-sc.fi-grid > .fi-grid-col:has(+ .fi-grid-col.fi-hidden) {
             border-bottom-width: 0;
         }
     </style>
@@ -97,7 +95,7 @@
             @else
                 <span
                     class="flex min-w-0 items-center"
-                    x-show="!editing"
+                    x-show="! editing"
                     x-cloak
                 >
                     <span>{{ $getLabelPrefix() }}</span>
@@ -176,7 +174,7 @@
                             <input
                                 type="text"
                                 x-ref="slugInput"
-                                x-bind:disabled="!editing"
+                                x-bind:disabled="! editing"
                                 x-on:keydown.enter="submitModification()"
                                 x-on:keydown.escape="cancelModification()"
                                 {!! ($autocomplete = $getAutocomplete()) ? "autocomplete=\"{$autocomplete}\"" : null !!}
@@ -229,9 +227,7 @@
         </div>
 
         @error($statePath)
-            <p class="text-danger-600 dark:text-danger-400 mt-1 text-sm">
-                {{ $message }}
-            </p>
+            <p class="text-danger-600 dark:text-danger-400 mt-1 text-sm">{{ $message }}</p>
         @enderror
     </div>
 </div>

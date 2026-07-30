@@ -28,11 +28,7 @@
             padding: 0;
         }
 
-        .fi-ta-content-ctn
-            .fi-ta-content
-            .capell-layout-card-record
-            > .fi-ta-record-content-ctn
-            .fi-ta-record-content {
+        .fi-ta-content-ctn .fi-ta-content .capell-layout-card-record > .fi-ta-record-content-ctn .fi-ta-record-content {
             padding: 0;
         }
 
@@ -104,9 +100,7 @@
                 <h3 class="truncate text-base font-semibold text-white">
                     {{ $card->title }}
                 </h3>
-                <p class="mt-0.5 truncate text-xs text-white/75">
-                    {{ $card->key }}
-                </p>
+                <p class="mt-0.5 truncate text-xs text-white/75">{{ $card->key }}</p>
             </div>
 
             @if ($card->isDefault)
@@ -166,9 +160,7 @@
                         <span class="truncate">{{ $containerName }}</span>
                     </div>
                 @empty
-                    <p
-                        class="text-sm text-gray-500 sm:col-span-2 dark:text-gray-400"
-                    >
+                    <p class="text-sm text-gray-500 sm:col-span-2 dark:text-gray-400">
                         {{ __('capell-admin::table.layout_no_containers') }}
                     </p>
                 @endforelse
@@ -179,16 +171,15 @@
             class="flex items-center justify-between border-t border-gray-100 pt-3 text-xs dark:border-white/10"
         >
             <span class="font-medium text-gray-500 dark:text-gray-400">
-                {{ __('capell-admin::table.last_updated') }}
-                {{ $card->lastUpdated }}
+                {{ __('capell-admin::table.last_updated') }} {{ $card->lastUpdated }}
             </span>
 
             <span
                 @class([
-                    'rounded-md px-2 py-1 font-medium',
-                    'bg-success-50 text-success-700 dark:bg-success-400/10 dark:text-success-300' => $card->isEnabled,
-                    'bg-gray-100 text-gray-600 dark:bg-white/10 dark:text-gray-300' => ! $card->isEnabled,
-                ])
+                'rounded-md px-2 py-1 font-medium',
+                'bg-success-50 text-success-700 dark:bg-success-400/10 dark:text-success-300' => $card->isEnabled,
+                'bg-gray-100 text-gray-600 dark:bg-white/10 dark:text-gray-300' => ! $card->isEnabled,
+            ])
             >
                 {{ $card->isEnabled ? __('capell-admin::form.enabled') : __('capell-admin::form.disabled') }}
             </span>

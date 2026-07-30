@@ -153,11 +153,7 @@
         }
 
         .capell-extension-card-record > .fi-ta-record-checkbox {
-            background: linear-gradient(
-                135deg,
-                rgb(255 255 255 / 0.98),
-                rgb(239 246 255 / 0.96)
-            );
+            background: linear-gradient(135deg, rgb(255 255 255 / 0.98), rgb(239 246 255 / 0.96));
             border-radius: 0 0 0.75rem 0;
             box-shadow:
                 0 0.875rem 1.75rem -1rem rgb(15 23 42 / 0.42),
@@ -170,11 +166,7 @@
         }
 
         :is(.dark .capell-extension-card-record > .fi-ta-record-checkbox) {
-            background: linear-gradient(
-                135deg,
-                rgb(17 24 39 / 0.98),
-                rgb(30 41 59 / 0.96)
-            );
+            background: linear-gradient(135deg, rgb(17 24 39 / 0.98), rgb(30 41 59 / 0.96));
             box-shadow:
                 0 0.875rem 1.75rem -1rem rgb(0 0 0 / 0.72),
                 0 0 0 1px rgb(255 255 255 / 0.12);
@@ -204,15 +196,11 @@
             min-width: max-content;
         }
 
-        .capell-extension-card-record
-            .fi-ta-actions
-            .capell-extension-card-lifecycle-action {
+        .capell-extension-card-record .fi-ta-actions .capell-extension-card-lifecycle-action {
             margin-inline-start: auto;
         }
 
-        .capell-extension-card-record
-            .fi-ta-actions
-            .capell-extension-card-details-action {
+        .capell-extension-card-record .fi-ta-actions .capell-extension-card-details-action {
             display: none;
         }
 
@@ -457,10 +445,10 @@
                                     @if ($ratingStar !== 'empty')
                                         <span
                                             @class([
-                                                'text-warning-400 absolute inset-0 overflow-hidden',
-                                                'w-1/2' => $ratingStar === 'half',
-                                                'w-full' => $ratingStar === 'full',
-                                            ])
+                                            'text-warning-400 absolute inset-0 overflow-hidden',
+                                            'w-1/2' => $ratingStar === 'half',
+                                            'w-full' => $ratingStar === 'full',
+                                        ])
                                         >
                                             ★
                                         </span>
@@ -479,11 +467,7 @@
     </figure>
 
     <div class="flex flex-1 flex-col gap-2.5 p-2">
-        <p
-            class="line-clamp-2 text-sm leading-5 text-gray-600 dark:text-gray-300"
-        >
-            {{ $description }}
-        </p>
+        <p class="line-clamp-2 text-sm leading-5 text-gray-600 dark:text-gray-300">{{ $description }}</p>
 
         <div
             class="mb-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-gray-600 dark:text-gray-300"

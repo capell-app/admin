@@ -32,9 +32,7 @@
 
 <div class="space-y-6">
     @if (is_string($description) && $description !== '')
-        <p class="text-sm leading-6 text-gray-600 dark:text-gray-300">
-            {{ $description }}
-        </p>
+        <p class="text-sm leading-6 text-gray-600 dark:text-gray-300">{{ $description }}</p>
     @endif
 
     <dl class="grid gap-3 sm:grid-cols-2">

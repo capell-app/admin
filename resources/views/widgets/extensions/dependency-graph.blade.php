@@ -12,8 +12,7 @@
                         {{ $blocker->packageName }}
                     </div>
                     <div class="mt-1 text-gray-600 dark:text-gray-300">
-                        {{ str($blocker->operation)->headline() }}:
-                        {{ str($blocker->reason)->replace('_', ' ')->headline() }}
+                        {{ str($blocker->operation)->headline() }}: {{ str($blocker->reason)->replace('_', ' ')->headline() }}
                     </div>
                 </div>
             @empty

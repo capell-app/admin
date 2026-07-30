@@ -17,9 +17,7 @@
                 class="mt-0.5 h-4 w-4 flex-shrink-0 opacity-70"
             />
 
-            <p class="flex-1">
-                {{ $content }}
-            </p>
+            <p class="flex-1">{{ $content }}</p>
 
             <button
                 class="flex-shrink-0 opacity-50 transition-opacity hover:opacity-100"

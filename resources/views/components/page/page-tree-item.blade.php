@@ -23,8 +23,7 @@
         :iconSize="IconSize::Small"
         :color="$color"
     >
-        {{ $ancestorLabel }}
-        {{ $page->name }}
+        {{ $ancestorLabel }} {{ $page->name }}
     </x-filament::link>
 
     <x-filament::link

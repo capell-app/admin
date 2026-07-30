@@ -16,9 +16,7 @@
                 </h2>
 
                 @if ($group['items']->isEmpty())
-                    <p class="mt-2 text-sm text-gray-500">
-                        {{ __('capell-admin::generic.recently_deleted_none') }}
-                    </p>
+                    <p class="mt-2 text-sm text-gray-500">{{ __('capell-admin::generic.recently_deleted_none') }}</p>
                 @else
                     <ul
                         class="mt-3 divide-y divide-gray-100 rounded-lg border border-gray-200 bg-white dark:divide-white/5 dark:border-white/10 dark:bg-gray-900"
@@ -28,14 +26,11 @@
                                 class="flex items-center justify-between gap-4 px-4 py-3"
                             >
                                 <div class="min-w-0 flex-1">
-                                    <p
-                                        class="truncate text-sm font-medium text-gray-900 dark:text-white"
-                                    >
+                                    <p class="truncate text-sm font-medium text-gray-900 dark:text-white">
                                         {{ $item->name ?? $item->file_name ?? '#' . $item->id }}
                                     </p>
                                     <p class="truncate text-xs text-gray-500">
-                                        {{ __('capell-admin::generic.deleted') }}
-                                        {{ $item->deleted_at?->diffForHumans() }}
+                                        {{ __('capell-admin::generic.deleted') }} {{ $item->deleted_at?->diffForHumans() }}
                                     </p>
                                 </div>
                                 <div class="flex shrink-0 items-center gap-2">

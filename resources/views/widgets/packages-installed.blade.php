@@ -1,11 +1,9 @@
 <x-filament-widgets::widget>
     <x-filament::section heading="Packages installed">
         @if ($this->data->packages->count() === 0)
-            <p class="text-sm text-gray-400 dark:text-gray-500">
-                No Capell packages detected in
-                <span class="font-mono">vendor/composer/installed.json</span>
-                .
-            </p>
+            <p class="text-sm text-gray-400 dark:text-gray-500">No Capell packages detected in
+            <span class="font-mono">vendor/composer/installed.json</span>
+            .</p>
         @else
             <div class="overflow-x-auto">
                 <table class="w-full text-sm">

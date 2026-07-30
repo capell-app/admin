@@ -100,16 +100,12 @@
                                         {{ $finding->title }}
                                     </div>
 
-                                    <p
-                                        class="mt-1 text-sm text-gray-600 dark:text-gray-300"
-                                    >
+                                    <p class="mt-1 text-sm text-gray-600 dark:text-gray-300">
                                         {{ $finding->description }}
                                     </p>
 
                                     @if ($finding->remediation !== null)
-                                        <p
-                                            class="mt-2 text-sm font-medium text-gray-700 dark:text-gray-200"
-                                        >
+                                        <p class="mt-2 text-sm font-medium text-gray-700 dark:text-gray-200">
                                             {{ $finding->remediation }}
                                         </p>
                                     @endif

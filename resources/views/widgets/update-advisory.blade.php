@@ -5,9 +5,7 @@
                 class="flex flex-col gap-3 md:flex-row md:items-start md:justify-between"
             >
                 <div>
-                    <p
-                        class="text-danger-700 dark:text-danger-300 text-sm font-semibold tracking-wide uppercase"
-                    >
+                    <p class="text-danger-700 dark:text-danger-300 text-sm font-semibold tracking-wide uppercase">
                         {{ __('capell-admin::dashboard.update_advisory_eyebrow') }}
                     </p>
                     <h2
@@ -15,9 +13,7 @@
                     >
                         {{ __('capell-admin::dashboard.update_advisory_title') }}
                     </h2>
-                    <p
-                        class="mt-2 text-sm leading-6 text-gray-700 dark:text-gray-300"
-                    >
+                    <p class="mt-2 text-sm leading-6 text-gray-700 dark:text-gray-300">
                         {{ __('capell-admin::dashboard.update_advisory_description') }}
                     </p>
                 </div>
@@ -55,9 +51,7 @@
                             {{ data_get($advisory, 'title', __('capell-admin::generic.security_advisory')) }}
                         </h3>
 
-                        <p
-                            class="mt-2 text-sm leading-6 text-gray-700 dark:text-gray-300"
-                        >
+                        <p class="mt-2 text-sm leading-6 text-gray-700 dark:text-gray-300">
                             {{ data_get($advisory, 'summary', __('capell-admin::generic.security_advisory_summary_missing')) }}
                         </p>
                     </article>

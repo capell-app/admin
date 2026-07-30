@@ -140,18 +140,18 @@
 
     <div
         {{
-            $attributes
-                ->merge([
-                    'id' => $id,
-                    'wire:key' => $getLivewireKey() . '.container',
-                ], escape: false)
-                ->merge($getExtraAttributes(), escape: false)
-                ->class([
-                    'fi-sc-tabs',
-                    'fi-contained' => $isContained,
-                    'fi-vertical' => $isVertical,
-                ])
-        }}
+        $attributes
+            ->merge([
+                'id' => $id,
+                'wire:key' => $getLivewireKey() . '.container',
+            ], escape: false)
+            ->merge($getExtraAttributes(), escape: false)
+            ->class([
+                'fi-sc-tabs',
+                'fi-contained' => $isContained,
+                'fi-vertical' => $isVertical,
+            ])
+    }}
     >
         <x-filament::tabs
             :contained="$isContained"

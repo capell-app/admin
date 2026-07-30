@@ -21,10 +21,10 @@
         <span class="ml-auto inline-flex items-center gap-2">
             <span
                 @class([
-                    'inline-flex items-center gap-1.5 font-medium',
-                    'text-success-600 dark:text-success-400' => $view->isEnabled(),
-                    'text-gray-400 dark:text-gray-500' => ! $view->isEnabled(),
-                ])
+                'inline-flex items-center gap-1.5 font-medium',
+                'text-success-600 dark:text-success-400' => $view->isEnabled(),
+                'text-gray-400 dark:text-gray-500' => ! $view->isEnabled(),
+            ])
             >
                 <span
                     @class([

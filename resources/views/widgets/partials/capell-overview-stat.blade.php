@@ -17,12 +17,12 @@
 
     <div
         @class([
-            'text-2xl font-semibold text-gray-950 dark:text-white',
-            'text-primary-600 dark:text-primary-400' => $stat->color === 'primary',
-            'text-success-600 dark:text-success-400' => $stat->color === 'success',
-            'text-warning-600 dark:text-warning-400' => $stat->color === 'warning',
-            'text-danger-600 dark:text-danger-400' => $stat->color === 'danger',
-        ])
+        'text-2xl font-semibold text-gray-950 dark:text-white',
+        'text-primary-600 dark:text-primary-400' => $stat->color === 'primary',
+        'text-success-600 dark:text-success-400' => $stat->color === 'success',
+        'text-warning-600 dark:text-warning-400' => $stat->color === 'warning',
+        'text-danger-600 dark:text-danger-400' => $stat->color === 'danger',
+    ])
     >
         {{ $stat->value }}
     </div>

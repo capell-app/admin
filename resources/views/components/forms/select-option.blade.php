@@ -34,15 +34,13 @@
 
     <div
         @class([
-            'leading-none',
-            'flex flex-col items-start justify-center' => ! $inline,
-        ])
+        'leading-none',
+        'flex flex-col items-start justify-center' => ! $inline,
+    ])
     >
         <span class="inline-flex gap-0.5">
             @if ($prefix)
-                <div class="text-xs font-light">
-                    {{ $prefix }}
-                </div>
+                <div class="text-xs font-light">{{ $prefix }}</div>
             @endif
 
             <div class="text-sm leading-normal font-normal">

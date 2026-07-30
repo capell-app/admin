@@ -22,15 +22,11 @@
         <div class="grid gap-4 lg:grid-cols-[minmax(0,1fr)_18rem]">
             <div class="space-y-2">
                 <div class="flex items-center justify-between gap-3">
-                    <p
-                        class="text-sm font-medium text-gray-950 dark:text-white"
-                    >
+                    <p class="text-sm font-medium text-gray-950 dark:text-white">
                         {{ __('capell-admin::media.preview') }}
                     </p>
 
-                    <p class="text-xs text-gray-500 dark:text-gray-400">
-                        {{ $x }}%, {{ $y }}%
-                    </p>
+                    <p class="text-xs text-gray-500 dark:text-gray-400">{{ $x }}%, {{ $y }}%</p>
                 </div>
 
                 <div
@@ -65,16 +61,12 @@
                     </div>
                 </div>
 
-                <p class="text-xs text-gray-500 dark:text-gray-400">
-                    {{ __('capell-admin::media.preview_hint') }}
-                </p>
+                <p class="text-xs text-gray-500 dark:text-gray-400">{{ __('capell-admin::media.preview_hint') }}</p>
             </div>
 
             @if ($presets !== [])
                 <div class="space-y-2">
-                    <p
-                        class="text-sm font-medium text-gray-950 dark:text-white"
-                    >
+                    <p class="text-sm font-medium text-gray-950 dark:text-white">
                         {{ __('capell-admin::media.preset_preview') }}
                     </p>
 

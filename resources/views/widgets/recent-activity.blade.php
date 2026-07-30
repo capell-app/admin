@@ -5,9 +5,7 @@
         @endphp
 
         @if ($items->isEmpty())
-            <p class="text-sm text-gray-500 dark:text-gray-400">
-                No recent activity.
-            </p>
+            <p class="text-sm text-gray-500 dark:text-gray-400">No recent activity.</p>
         @else
             <div class="divide-y divide-gray-100 dark:divide-gray-800">
                 @foreach ($items as $item)

@@ -15,8 +15,7 @@
                             {{ $update->packageName }}
                         </div>
                         <div class="text-xs text-gray-500 dark:text-gray-400">
-                            {{ $update->currentVersion }} ->
-                            {{ $update->latestVersion ?? __('capell-admin::generic.unknown') }}
+                            {{ $update->currentVersion }} -> {{ $update->latestVersion ?? __('capell-admin::generic.unknown') }}
                         </div>
                     </div>
                     <span

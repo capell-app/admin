@@ -13,8 +13,7 @@
             >
                 @foreach ($sites as $site)
                     <option value="{{ $site->id }}">
-                        {{ $site->name }}
-                        ({{ $site->translations->pluck('language.code')->implode(', ') }})
+                        {{ $site->name }} ({{ $site->translations->pluck('language.code')->implode(', ') }})
                     </option>
                 @endforeach
             </x-filament::input.select>
@@ -57,9 +56,7 @@
             <h2 class="text-base font-semibold text-gray-950 dark:text-white">
                 {{ __('capell-admin::generic.no_sitemap_preview') }}
             </h2>
-            <p class="mt-1">
-                {{ __('capell-admin::generic.no_sitemap_preview_description') }}
-            </p>
+            <p class="mt-1">{{ __('capell-admin::generic.no_sitemap_preview_description') }}</p>
         </div>
     @endif
 
@@ -159,61 +156,61 @@
             background: var(--color-secondary);
             color: var(--color-secondary-tint);
         }
+        @media
+        only screen and (max-width: 768px) {
+                   .vsitemap > ul > li > ul > li ul li {
+                       flex-direction: column;
+                   }
 
-        @media only screen and (max-width: 768px) {
-            .vsitemap > ul > li > ul > li ul li {
-                flex-direction: column;
-            }
+                   .vsitemap > ul > li > ul > li ul li ul {
+                       margin-top: calc(var(--item-gap) / 2);
+                   }
 
-            .vsitemap > ul > li > ul > li ul li ul {
-                margin-top: calc(var(--item-gap) / 2);
-            }
+                   .vsitemap > ul > li > ul > li > ul li:after {
+                       left: calc(-1 * var(--item-gap) / 2);
+                   }
 
-            .vsitemap > ul > li > ul > li > ul li:after {
-                left: calc(-1 * var(--item-gap) / 2);
-            }
+                   .vsitemap > ul > li > ul > li > ul > li li:first-child:before {
+                       width: calc(var(--item-gap) / 2);
+                       left: calc(-1 * var(--item-gap) / 2);
+                   }
 
-            .vsitemap > ul > li > ul > li > ul > li li:first-child:before {
-                width: calc(var(--item-gap) / 2);
-                left: calc(-1 * var(--item-gap) / 2);
-            }
+                   .vsitemap > ul > li > ul > li > ul > li li:first-child:after {
+                       top: calc(-1 * var(--item-gap) / 2);
+                   }
 
-            .vsitemap > ul > li > ul > li > ul > li li:first-child:after {
-                top: calc(-1 * var(--item-gap) / 2);
-            }
+                   .vsitemap > ul > li > ul > li > ul > li li:only-child:after {
+                       display: block;
+                       height: calc(var(--item-gap) / 2 + 1em);
+                   }
+               }
+        @media
+        only screen and (max-width: 576px) {
+                   .vsitemap > ul > li ul li {
+                       flex-direction: column;
+                   }
 
-            .vsitemap > ul > li > ul > li > ul > li li:only-child:after {
-                display: block;
-                height: calc(var(--item-gap) / 2 + 1em);
-            }
-        }
+                   .vsitemap > ul > li ul li ul {
+                       margin-top: calc(var(--item-gap) / 2);
+                   }
 
-        @media only screen and (max-width: 576px) {
-            .vsitemap > ul > li ul li {
-                flex-direction: column;
-            }
+                   .vsitemap > ul > li > ul li:after {
+                       left: calc(-1 * var(--item-gap) / 2);
+                   }
 
-            .vsitemap > ul > li ul li ul {
-                margin-top: calc(var(--item-gap) / 2);
-            }
+                   .vsitemap > ul > li > ul > li li:first-child:before {
+                       width: calc(var(--item-gap) / 2);
+                       left: calc(-1 * var(--item-gap) / 2);
+                   }
 
-            .vsitemap > ul > li > ul li:after {
-                left: calc(-1 * var(--item-gap) / 2);
-            }
+                   .vsitemap > ul > li > ul > li li:first-child:after {
+                       top: calc(-1 * var(--item-gap) / 2);
+                   }
 
-            .vsitemap > ul > li > ul > li li:first-child:before {
-                width: calc(var(--item-gap) / 2);
-                left: calc(-1 * var(--item-gap) / 2);
-            }
-
-            .vsitemap > ul > li > ul > li li:first-child:after {
-                top: calc(-1 * var(--item-gap) / 2);
-            }
-
-            .vsitemap > ul > li > ul > li li:only-child:after {
-                display: block;
-                height: calc(var(--item-gap) / 2 + 1em);
-            }
-        }
+                   .vsitemap > ul > li > ul > li li:only-child:after {
+                       display: block;
+                       height: calc(var(--item-gap) / 2 + 1em);
+                   }
+               }
     </style>
 </x-filament-panels::page>

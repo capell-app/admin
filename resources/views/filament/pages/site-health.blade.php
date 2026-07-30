@@ -41,13 +41,7 @@
                     </x-filament::input.select>
                 </x-filament::input.wrapper>
 
-                <p
-                    class="sr-only"
-                    role="status"
-                    aria-live="polite"
-                    wire:loading
-                    wire:target="selectedSiteId"
-                >
+                <p class="sr-only" role="status" aria-live="polite" wire:loading wire:target="selectedSiteId">
                     {{ __('capell-admin::generic.site_health_updating') }}
                 </p>
 
@@ -115,15 +109,12 @@
 
                                         @if ($check->generatedAt)
                                             <div>
-                                                {{ __('capell-admin::generic.generated') }}:
-                                                {{ $check->generatedAt }}
+                                                {{ __('capell-admin::generic.generated') }}: {{ $check->generatedAt }}
                                             </div>
                                         @endif
 
                                         @if ($check->remediation)
-                                            <div>
-                                                {{ $check->remediation }}
-                                            </div>
+                                            <div>{{ $check->remediation }}</div>
                                         @endif
                                     </div>
                                 @endif
@@ -135,9 +126,11 @@
         </div>
 
         @foreach ($this->siteHealthWidgets() as $widget)
-            @livewire($widget->component(),
+            @livewire(
+                $widget->component(),
                 $this->siteHealthWidgetParameters($widget),
-                key($widget->key() . '-' . ($selectedSiteId ?? 'none')))
+                key($widget->key() . '-' . ($selectedSiteId ?? 'none')),
+)
         @endforeach
     </div>
 </x-filament-panels::page>

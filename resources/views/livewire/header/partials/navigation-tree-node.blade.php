@@ -87,9 +87,7 @@
         >
             @svg($typeIcon, $isSearchMatch ? 'text-primary-500 dark:text-primary-300 h-4 w-4 shrink-0' : 'h-4 w-4 shrink-0 text-gray-400 group-hover:text-gray-500 dark:group-hover:text-gray-300')
             <span class="flex min-w-0 flex-1 items-baseline gap-2">
-                <span class="truncate">
-                    {{ $node['name'] }}
-                </span>
+                <span class="truncate"> {{ $node['name'] }} </span>
                 @if (is_string($node['public_url'] ?? null))
                     <span
                         class="min-w-0 shrink truncate text-xs font-normal text-gray-400 dark:text-gray-500"

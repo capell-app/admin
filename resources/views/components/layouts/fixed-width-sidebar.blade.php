@@ -1,12 +1,7 @@
 <div
     {{ $attributes->merge(['class' => '@container fixed-sidebar contain-layout']) }}
     x-data="{ showModal: false }"
-    x-init="
-        window.addEventListener(
-            'showModalUpdated',
-            (e) => (showModal = e.detail.showModal),
-        )
-    "
+    x-init="window.addEventListener('showModalUpdated', (e) => (showModal = e.detail.showModal))"
 >
     <div
         class="fixed-sidebar__wrapper flex max-w-full min-w-0 flex-wrap gap-6 @4xl:flex-nowrap"
@@ -30,17 +25,14 @@
 
     @script
         <script>
-            Livewire.on(
-                'sync-action-modals',
-                ({ id, newActionNestingIndex }) => {
-                    let showModal = newActionNestingIndex !== null
-                    window.dispatchEvent(
-                        new CustomEvent('showModalUpdated', {
-                            detail: { showModal },
-                        }),
-                    )
-                },
-            )
+            Livewire.on('sync-action-modals', ({ id, newActionNestingIndex }) => {
+                let showModal = newActionNestingIndex !== null;
+                window.dispatchEvent(
+                    new CustomEvent('showModalUpdated', {
+                        detail: { showModal },
+                    }),
+                );
+            });
         </script>
     @endscript
 </div>

@@ -203,9 +203,9 @@
                 >
                     <div
                         @class([
-                            'max-w-full min-w-0' => $isContained,
-                            'p-4' => $isContained && $isCompact,
-                        ])
+                        'max-w-full min-w-0' => $isContained,
+                        'p-4' => $isContained && $isCompact,
+                    ])
                     >
                         {{ $item }}
                     </div>
@@ -215,9 +215,9 @@
     @elseif ($isAddable && $createItems)
         <div
             @class([
-                'flex max-w-full min-w-0 flex-col gap-y-4',
-                'p-4' => $isCompact,
-            ])
+            'flex max-w-full min-w-0 flex-col gap-y-4',
+            'p-4' => $isCompact,
+        ])
         >
             <div class="flex flex-col gap-y-1">
                 <h3

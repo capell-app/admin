@@ -42,9 +42,7 @@
                                     </div>
 
                                     @if ($action->resolvedDescription() !== null)
-                                        <p
-                                            class="mt-1 text-xs leading-5 text-gray-500 dark:text-gray-400"
-                                        >
+                                        <p class="mt-1 text-xs leading-5 text-gray-500 dark:text-gray-400">
                                             {{ $action->resolvedDescription() }}
                                         </p>
                                     @endif

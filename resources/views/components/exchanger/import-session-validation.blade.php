@@ -27,25 +27,19 @@
             </h3>
             <dl class="mt-2 space-y-1 text-sm">
                 <div class="flex justify-between">
-                    <dt>
-                        {{ __('capell-admin::exchanger.summary_create') }}
-                    </dt>
+                    <dt>{{ __('capell-admin::exchanger.summary_create') }}</dt>
                     <dd class="font-mono">
                         {{ $pagesBuckets['create'] ?? 0 }}
                     </dd>
                 </div>
                 <div class="flex justify-between">
-                    <dt>
-                        {{ __('capell-admin::exchanger.summary_update') }}
-                    </dt>
+                    <dt>{{ __('capell-admin::exchanger.summary_update') }}</dt>
                     <dd class="font-mono">
                         {{ $pagesBuckets['update'] ?? 0 }}
                     </dd>
                 </div>
                 <div class="flex justify-between">
-                    <dt>
-                        {{ __('capell-admin::exchanger.summary_skip') }}
-                    </dt>
+                    <dt>{{ __('capell-admin::exchanger.summary_skip') }}</dt>
                     <dd class="font-mono">{{ $pagesBuckets['skip'] ?? 0 }}</dd>
                 </div>
             </dl>
@@ -56,41 +50,31 @@
             </h3>
             <dl class="mt-2 space-y-1 text-sm">
                 <div class="flex justify-between">
-                    <dt>
-                        {{ __('capell-admin::exchanger.summary_match') }}
-                    </dt>
+                    <dt>{{ __('capell-admin::exchanger.summary_match') }}</dt>
                     <dd class="font-mono">
                         {{ $relationsBuckets['match'] ?? 0 }}
                     </dd>
                 </div>
                 <div class="flex justify-between">
-                    <dt>
-                        {{ __('capell-admin::exchanger.summary_create') }}
-                    </dt>
+                    <dt>{{ __('capell-admin::exchanger.summary_create') }}</dt>
                     <dd class="font-mono">
                         {{ $relationsBuckets['create'] ?? 0 }}
                     </dd>
                 </div>
                 <div class="flex justify-between">
-                    <dt>
-                        {{ __('capell-admin::exchanger.summary_clone') }}
-                    </dt>
+                    <dt>{{ __('capell-admin::exchanger.summary_clone') }}</dt>
                     <dd class="font-mono">
                         {{ $relationsBuckets['clone'] ?? 0 }}
                     </dd>
                 </div>
                 <div class="flex justify-between">
-                    <dt>
-                        {{ __('capell-admin::exchanger.summary_update') }}
-                    </dt>
+                    <dt>{{ __('capell-admin::exchanger.summary_update') }}</dt>
                     <dd class="font-mono">
                         {{ $relationsBuckets['update'] ?? 0 }}
                     </dd>
                 </div>
                 <div class="flex justify-between">
-                    <dt>
-                        {{ __('capell-admin::exchanger.summary_skip') }}
-                    </dt>
+                    <dt>{{ __('capell-admin::exchanger.summary_skip') }}</dt>
                     <dd class="font-mono">
                         {{ $relationsBuckets['skip'] ?? 0 }}
                     </dd>
@@ -103,20 +87,14 @@
             </h3>
             <dl class="mt-2 space-y-1 text-sm">
                 <div class="flex justify-between">
-                    <dt>
-                        {{ __('capell-admin::exchanger.summary_import') }}
-                    </dt>
+                    <dt>{{ __('capell-admin::exchanger.summary_import') }}</dt>
                     <dd class="font-mono">
                         {{ $mediaBuckets['import'] ?? 0 }}
                     </dd>
                 </div>
                 <div class="flex justify-between">
-                    <dt>
-                        {{ __('capell-admin::exchanger.summary_reuse') }}
-                    </dt>
-                    <dd class="font-mono">
-                        {{ $mediaBuckets['reuse'] ?? 0 }}
-                    </dd>
+                    <dt>{{ __('capell-admin::exchanger.summary_reuse') }}</dt>
+                    <dd class="font-mono">{{ $mediaBuckets['reuse'] ?? 0 }}</dd>
                 </div>
             </dl>
         </div>

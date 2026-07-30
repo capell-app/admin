@@ -23,9 +23,7 @@
             class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between"
         >
             <div class="space-y-1">
-                <p class="text-sm font-semibold text-gray-950 dark:text-white">
-                    {{ $changeSet->summary }}
-                </p>
+                <p class="text-sm font-semibold text-gray-950 dark:text-white">{{ $changeSet->summary }}</p>
                 <p class="text-sm text-gray-600 dark:text-gray-300">
                     {{ $changeSet->resource?->label ?? __('capell-admin::activity.subject_missing') }}
                 </p>
@@ -131,9 +129,7 @@
                             </div>
 
                             @if ($fieldDiff->label !== $fieldDiff->path)
-                                <p
-                                    class="mt-1 text-xs break-all text-gray-500 dark:text-gray-400"
-                                >
+                                <p class="mt-1 text-xs break-all text-gray-500 dark:text-gray-400">
                                     {{ $fieldDiff->path }}
                                 </p>
                             @endif
@@ -211,9 +207,7 @@
                             </div>
 
                             @if ($fieldDiff->hiddenNestedChangeCount > 0)
-                                <p
-                                    class="mt-2 text-xs text-gray-500 dark:text-gray-400"
-                                >
+                                <p class="mt-2 text-xs text-gray-500 dark:text-gray-400">
                                     {{ trans_choice('capell-admin::activity.more_nested_changes', $fieldDiff->hiddenNestedChangeCount, ['count' => $fieldDiff->hiddenNestedChangeCount]) }}
                                 </p>
                             @endif
@@ -272,8 +266,7 @@
                                         </div>
                                         <pre
                                             class="max-h-64 overflow-auto rounded-md bg-white p-3 text-xs break-words whitespace-pre-wrap text-gray-700 dark:bg-gray-950 dark:text-gray-300"
-                                        >
-{{ $fieldDiff->beforeDetail }}</pre
+                                            >{{ $fieldDiff->beforeDetail }}</pre
                                         >
                                     </div>
 
@@ -285,8 +278,7 @@
                                         </div>
                                         <pre
                                             class="max-h-64 overflow-auto rounded-md bg-white p-3 text-xs break-words whitespace-pre-wrap text-gray-700 dark:bg-gray-950 dark:text-gray-300"
-                                        >
-{{ $fieldDiff->afterDetail }}</pre
+                                            >{{ $fieldDiff->afterDetail }}</pre
                                         >
                                     </div>
                                 </div>
@@ -303,9 +295,7 @@
             <p class="text-sm font-medium text-gray-950 dark:text-white">
                 {{ __('capell-admin::activity.no_field_changes') }}
             </p>
-            <p class="mt-1 text-sm text-gray-600 dark:text-gray-300">
-                {{ __($emptyDescriptionKey) }}
-            </p>
+            <p class="mt-1 text-sm text-gray-600 dark:text-gray-300">{{ __($emptyDescriptionKey) }}</p>
         </section>
     @endif
 </div>

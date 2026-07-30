@@ -36,9 +36,9 @@
                 <tr>
                     <td
                         @class([
-                            'border-r border-gray-100 p-2 text-xs leading-tight text-gray-600',
-                            'border-b' => ! $loop->last,
-                        ])
+                        'border-r border-gray-100 p-2 text-xs leading-tight text-gray-600',
+                        'border-b' => ! $loop->last,
+                    ])
                     >
                         <div
                             class="inline"
@@ -66,9 +66,9 @@
                     </td>
                     <td
                         @class([
-                            'border-gray-100 p-2 text-xs leading-tight text-gray-600',
-                            'border-b' => ! $loop->last,
-                        ])
+                        'border-gray-100 p-2 text-xs leading-tight text-gray-600',
+                        'border-b' => ! $loop->last,
+                    ])
                     >
                         <div
                             class="inline"

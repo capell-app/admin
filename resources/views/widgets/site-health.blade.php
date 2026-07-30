@@ -7,9 +7,7 @@
         :heading="__('capell-admin::dashboard.health_heading')"
     >
         @if ($this->allGood)
-            <p class="text-sm text-gray-500 dark:text-gray-400">
-                {{ __('capell-admin::dashboard.health_all_good') }}
-            </p>
+            <p class="text-sm text-gray-500 dark:text-gray-400">{{ __('capell-admin::dashboard.health_all_good') }}</p>
         @else
             <div class="space-y-2">
                 @foreach ($this->setupHealth->checks as $check)

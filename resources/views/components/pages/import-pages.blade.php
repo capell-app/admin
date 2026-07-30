@@ -226,9 +226,7 @@
                                                 <div
                                                     class="text-xs text-gray-500"
                                                 >
-                                                    {{ $topMatch['strategy'] }}
-                                                    ·
-                                                    {{ number_format((float) $topMatch['confidence'] * 100, 0) }}%
+                                                    {{ $topMatch['strategy'] }} · {{ number_format((float) $topMatch['confidence'] * 100, 0) }}%
                                                 </div>
                                                 @if (! empty($topMatch['reason']))
                                                     <div
@@ -252,11 +250,7 @@
                                                         <li
                                                             class="text-xs text-gray-600 dark:text-gray-300"
                                                         >
-                                                            #{{ $alternative['local_id'] }}
-                                                            ·
-                                                            {{ $alternative['strategy'] }}
-                                                            ·
-                                                            {{ number_format((float) $alternative['confidence'] * 100, 0) }}%
+                                                            #{{ $alternative['local_id'] }} · {{ $alternative['strategy'] }} · {{ number_format((float) $alternative['confidence'] * 100, 0) }}%
                                                             @if (! empty($alternative['reason']))
                                                                 <span
                                                                     class="text-gray-400"
@@ -516,19 +510,13 @@
                     aria-describedby="import-confirmation-helper"
                     class="block w-full rounded-md border-gray-300 text-sm dark:border-gray-700 dark:bg-gray-800"
                 />
-                <p
-                    id="import-confirmation-helper"
-                    class="text-xs text-gray-500"
-                >
+                <p id="import-confirmation-helper" class="text-xs text-gray-500">
                     {{ __('capell-admin::exchanger.confirmation_helper', ['expected' => $confirmationExpected]) }}
                 </p>
             </div>
 
             @if ($hasBlockingErrors)
-                <p
-                    id="import-dispatch-blocked-helper"
-                    class="text-sm text-rose-700 dark:text-rose-200"
-                >
+                <p id="import-dispatch-blocked-helper" class="text-sm text-rose-700 dark:text-rose-200">
                     {{ __('capell-admin::exchanger.summary_blocking_errors_instruction') }}
                 </p>
             @endif
@@ -537,8 +525,8 @@
                 <x-filament::button
                     wire:click="dispatchImport"
                     :disabled="$hasBlockingErrors || ! $confirmationMatchesExpected"
-                    @if ($hasBlockingErrors)
-                    aria-describedby="import-dispatch-blocked-helper"
+                    @if($hasBlockingErrors)
+                        aria-describedby="import-dispatch-blocked-helper"
                     @endif
                 >
                     {{ __('capell-admin::exchanger.dispatch_button') }}
@@ -585,19 +573,8 @@
                     fill="none"
                     viewBox="0 0 24 24"
                 >
-                    <circle
-                        class="opacity-25"
-                        cx="12"
-                        cy="12"
-                        r="10"
-                        stroke="currentColor"
-                        stroke-width="4"
-                    ></circle>
-                    <path
-                        class="opacity-75"
-                        fill="currentColor"
-                        d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"
-                    ></path>
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
                 </svg>
                 <span class="font-medium">{{ $statusLabel }}</span>
             </div>
@@ -691,8 +668,7 @@
             @if (! empty($failureReason))
                 <pre
                     class="overflow-auto rounded bg-rose-100 p-3 text-xs text-rose-900 dark:bg-rose-900/40 dark:text-rose-100"
-                >
-{{ $failureReason }}</pre
+                    >{{ $failureReason }}</pre
                 >
             @endif
 

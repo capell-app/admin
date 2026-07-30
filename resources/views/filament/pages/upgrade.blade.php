@@ -22,9 +22,7 @@
                 class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between"
             >
                 <div>
-                    <p
-                        class="text-xs font-semibold text-gray-500 uppercase dark:text-gray-400"
-                    >
+                    <p class="text-xs font-semibold text-gray-500 uppercase dark:text-gray-400">
                         {{ __('capell-admin::generic.update_center_status') }}
                     </p>
                     <h2
@@ -37,9 +35,7 @@
                             ])
                         }}
                     </h2>
-                    <p class="mt-1 text-sm text-gray-600 dark:text-gray-400">
-                        {{ $this->updateDistanceLabel() }}
-                    </p>
+                    <p class="mt-1 text-sm text-gray-600 dark:text-gray-400">{{ $this->updateDistanceLabel() }}</p>
                 </div>
 
                 <dl class="grid gap-2 sm:grid-cols-4 lg:min-w-[34rem]">
@@ -153,9 +149,7 @@
                 <div
                     class="rounded-lg border border-gray-200 p-4 dark:border-white/10"
                 >
-                    <p
-                        class="text-sm font-medium text-gray-950 dark:text-white"
-                    >
+                    <p class="text-sm font-medium text-gray-950 dark:text-white">
                         {{ __('capell-admin::generic.no_update_advisories') }}
                     </p>
                     <p class="mt-1 text-sm text-gray-600 dark:text-gray-400">
@@ -202,9 +196,7 @@
                                         {{ data_get($notice, 'title', __('capell-admin::generic.package_update')) }}
                                     </h3>
 
-                                    <p
-                                        class="mt-1 text-sm leading-6 text-gray-600 dark:text-gray-400"
-                                    >
+                                    <p class="mt-1 text-sm leading-6 text-gray-600 dark:text-gray-400">
                                         {{ data_get($notice, 'summary', __('capell-admin::generic.package_update_summary_missing')) }}
                                     </p>
                                 </div>
@@ -328,23 +320,17 @@
                     >
                         {{ __('capell-admin::generic.update_readiness') }}
                     </h2>
-                    <p
-                        class="truncate text-sm text-gray-600 dark:text-gray-400"
-                    >
+                    <p class="truncate text-sm text-gray-600 dark:text-gray-400">
                         {{ __('capell-admin::generic.update_readiness_hint') }}
                     </p>
                 </div>
 
                 <div class="flex items-center gap-3">
                     <div class="hidden text-right sm:block">
-                        <p
-                            class="text-xs font-medium text-gray-500 uppercase dark:text-gray-400"
-                        >
+                        <p class="text-xs font-medium text-gray-500 uppercase dark:text-gray-400">
                             {{ __('capell-admin::generic.readiness_checks') }}
                         </p>
-                        <p
-                            class="text-sm font-semibold text-gray-950 dark:text-white"
-                        >
+                        <p class="text-sm font-semibold text-gray-950 dark:text-white">
                             {{ count($readinessReport->checks) }}
                         </p>
                     </div>
@@ -382,18 +368,16 @@
                                     </h3>
                                     <span
                                         @class([
-                                            'rounded-full px-2 py-0.5 text-xs font-semibold ring-1',
-                                            'bg-success-50 text-success-800 ring-success-600/20 dark:bg-success-400/10 dark:text-success-200 dark:ring-success-300/20' => $check->passed,
-                                            'bg-warning-50 text-warning-800 ring-warning-600/20 dark:bg-warning-400/10 dark:text-warning-200 dark:ring-warning-300/20' => ! $check->passed && ! $check->blocking,
-                                            'bg-danger-50 text-danger-800 ring-danger-600/20 dark:bg-danger-400/10 dark:text-danger-200 dark:ring-danger-300/20' => ! $check->passed && $check->blocking,
-                                        ])
+                                        'rounded-full px-2 py-0.5 text-xs font-semibold ring-1',
+                                        'bg-success-50 text-success-800 ring-success-600/20 dark:bg-success-400/10 dark:text-success-200 dark:ring-success-300/20' => $check->passed,
+                                        'bg-warning-50 text-warning-800 ring-warning-600/20 dark:bg-warning-400/10 dark:text-warning-200 dark:ring-warning-300/20' => ! $check->passed && ! $check->blocking,
+                                        'bg-danger-50 text-danger-800 ring-danger-600/20 dark:bg-danger-400/10 dark:text-danger-200 dark:ring-danger-300/20' => ! $check->passed && $check->blocking,
+                                    ])
                                     >
                                         {{ $check->passed ? __('capell-admin::generic.passed') : ($check->blocking ? __('capell-admin::generic.blocked') : __('capell-admin::generic.warning')) }}
                                     </span>
                                 </div>
-                                <p
-                                    class="mt-1 text-xs leading-5 text-gray-600 dark:text-gray-400"
-                                >
+                                <p class="mt-1 text-xs leading-5 text-gray-600 dark:text-gray-400">
                                     {{ $check->message }}
                                 </p>
                             </div>
@@ -416,15 +400,11 @@
                         >
                             {{ __('capell-admin::generic.upgrade_run_timeline') }}
                         </h2>
-                        <p
-                            class="mt-1 text-sm text-gray-600 dark:text-gray-400"
-                        >
+                        <p class="mt-1 text-sm text-gray-600 dark:text-gray-400">
                             {{ __('capell-admin::generic.upgrade_run_status', ['status' => $this->runStatusLabel($currentUpgradeRun->status)]) }}
                         </p>
                     </div>
-                    <p class="text-xs text-gray-500 dark:text-gray-400">
-                        #{{ $currentUpgradeRun->getKey() }}
-                    </p>
+                    <p class="text-xs text-gray-500 dark:text-gray-400">#{{ $currentUpgradeRun->getKey() }}</p>
                 </div>
 
                 <ol class="mt-4 space-y-3">
@@ -452,11 +432,7 @@
                                     {{ $event->occurred_at->diffForHumans() }}
                                 </span>
                             </div>
-                            <p
-                                class="mt-1 text-sm text-gray-700 dark:text-gray-300"
-                            >
-                                {{ $event->message }}
-                            </p>
+                            <p class="mt-1 text-sm text-gray-700 dark:text-gray-300">{{ $event->message }}</p>
                         </li>
                     @empty
                         <li class="text-sm text-gray-600 dark:text-gray-400">
@@ -479,8 +455,7 @@
 
                 <pre
                     class="mt-3 max-h-96 overflow-auto rounded-lg bg-gray-950 p-4 text-sm text-gray-100"
-                >
-{{ $this->lastOutput }}</pre
+                    >{{ $this->lastOutput }}</pre
                 >
             </details>
         @endif

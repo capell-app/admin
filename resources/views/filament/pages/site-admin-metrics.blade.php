@@ -16,11 +16,7 @@
                 @endif
 
                 <div class="space-y-5">
-                    <p
-                        class="text-3xl font-semibold text-gray-950 dark:text-white"
-                    >
-                        {{ $series->latestValue }}
-                    </p>
+                    <p class="text-3xl font-semibold text-gray-950 dark:text-white">{{ $series->latestValue }}</p>
 
                     @if ($series->points !== [])
                         <p class="text-xs text-gray-500 dark:text-gray-400">

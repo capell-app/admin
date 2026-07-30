@@ -41,11 +41,7 @@
             padding: 0;
         }
 
-        .fi-ta-content-ctn
-            .fi-ta-content
-            .capell-theme-card-record
-            > .fi-ta-record-content-ctn
-            .fi-ta-record-content {
+        .fi-ta-content-ctn .fi-ta-content .capell-theme-card-record > .fi-ta-record-content-ctn .fi-ta-record-content {
             padding: 0;
         }
 
@@ -113,9 +109,7 @@
                 <h3 class="truncate text-base font-semibold text-white">
                     {{ $card->title }}
                 </h3>
-                <p class="mt-0.5 truncate text-xs text-white/75">
-                    {{ $card->package }}
-                </p>
+                <p class="mt-0.5 truncate text-xs text-white/75">{{ $card->package }}</p>
             </div>
         </div>
 
@@ -154,18 +148,13 @@
                 </div>
 
                 <p class="text-xs font-medium text-gray-500 dark:text-gray-400">
-                    {{ __('capell-admin::theme-library.labels.sites') }}:
-                    {{ $card->siteCount }}
+                    {{ __('capell-admin::theme-library.labels.sites') }}: {{ $card->siteCount }}
                 </p>
 
-                <p class="text-sm text-gray-600 dark:text-gray-300">
-                    {{ $card->description }}
-                </p>
+                <p class="text-sm text-gray-600 dark:text-gray-300">{{ $card->description }}</p>
 
                 @if ($diagnosticMessages->isNotEmpty())
-                    <p class="text-sm text-gray-600 dark:text-gray-300">
-                        {{ $diagnosticMessages->first() }}
-                    </p>
+                    <p class="text-sm text-gray-600 dark:text-gray-300">{{ $diagnosticMessages->first() }}</p>
                 @endif
             </div>
 
@@ -191,15 +180,13 @@
                     <div
                         class="rounded-md bg-gray-50 px-3 py-2 text-gray-700 dark:bg-white/5 dark:text-gray-200"
                     >
-                        {{ __('capell-admin::theme-library.labels.sites') }}:
-                        {{ $card->siteCount }}
+                        {{ __('capell-admin::theme-library.labels.sites') }}: {{ $card->siteCount }}
                     </div>
 
                     <div
                         class="rounded-md bg-gray-50 px-3 py-2 text-gray-700 dark:bg-white/5 dark:text-gray-200"
                     >
-                        {{ __('capell-admin::theme-library.labels.package') }}:
-                        {{ $card->package }}
+                        {{ __('capell-admin::theme-library.labels.package') }}: {{ $card->package }}
                     </div>
                 </div>
             </details>

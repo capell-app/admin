@@ -8,17 +8,17 @@
 
 <div
     {{
-        $attributes->merge($getExtraAttributes())->class([
-            'filament-tables-language-flags-column flex items-center gap-2',
-            'px-4 py-3' => ! $isInline(),
-            match ($getAlignment()) {
-                Alignment::Left => 'justify-start',
-                Alignment::Center => 'justify-center',
-                Alignment::Right => 'justify-end',
-                default => null,
-            },
-        ])
-    }}
+    $attributes->merge($getExtraAttributes())->class([
+        'filament-tables-language-flags-column flex items-center gap-2',
+        'px-4 py-3' => ! $isInline(),
+        match ($getAlignment()) {
+            Alignment::Left => 'justify-start',
+            Alignment::Center => 'justify-center',
+            Alignment::Right => 'justify-end',
+            default => null,
+        },
+    ])
+}}
 >
     @if (property_exists($record, 'language'))
         @if ($record->language->flag)

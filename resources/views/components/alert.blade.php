@@ -39,9 +39,9 @@
         @if ($icon)
             <div
                 @class([
-                    'flex-shrink-0',
-                    $iconVerticalAlignment === 'start' ? 'self-start' : 'self-center',
-                ])
+                'flex-shrink-0',
+                $iconVerticalAlignment === 'start' ? 'self-start' : 'self-center',
+            ])
             >
                 <x-filament::icon
                     :icon="$icon"
@@ -56,17 +56,11 @@
             @if ($title || $description)
                 <div class="space-y-0.5">
                     @if ($title)
-                        <p
-                            class="text-custom-800 text-sm font-medium dark:text-white"
-                        >
-                            {{ $title }}
-                        </p>
+                        <p class="text-custom-800 text-sm font-medium dark:text-white">{{ $title }}</p>
                     @endif
 
                     @if ($description)
-                        <p class="text-custom-700 text-sm dark:text-white">
-                            {{ $description }}
-                        </p>
+                        <p class="text-custom-700 text-sm dark:text-white">{{ $description }}</p>
                     @endif
                 </div>
             @endif
@@ -74,9 +68,9 @@
             @if ($actions)
                 <div
                     @class([
-                        'flex items-center gap-3',
-                        $actionsVerticalAlignment === 'start' ? 'self-start' : 'self-center',
-                    ])
+                    'flex items-center gap-3',
+                    $actionsVerticalAlignment === 'start' ? 'self-start' : 'self-center',
+                ])
                 >
                     <div class="flex items-center gap-3 whitespace-nowrap">
                         @foreach ($actions as $action)

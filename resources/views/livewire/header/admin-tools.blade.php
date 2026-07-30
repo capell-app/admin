@@ -11,7 +11,7 @@
     @if ($this->canViewTools())
         <x-filament::dropdown
             placement="bottom-end"
-            x-on:close-dropdown="if ($event.detail.id === 'admin-tools-dropdown') close()"
+            x-on:close-dropdown="if ($event.detail.id === 'admin-tools-dropdown') close();"
         >
             <x-slot name="trigger">
                 <button

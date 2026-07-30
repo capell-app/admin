@@ -15,9 +15,7 @@
                         &#10003; No config drift detected
                     </span>
                     <span class="text-green-500 dark:text-green-600">
-                        ({{ $data->packagesChecked }}
-                        {{ Str::plural('package', $data->packagesChecked) }}
-                        checked)
+                        ({{ $data->packagesChecked }} {{ Str::plural('package', $data->packagesChecked) }} checked)
                     </span>
                 </div>
             @else
@@ -26,12 +24,10 @@
                     <span
                         class="rounded-full bg-red-100 px-2.5 py-0.5 text-xs font-semibold text-red-700 dark:bg-red-900/40 dark:text-red-300"
                     >
-                        {{ $data->totalDriftCount }}
-                        {{ Str::plural('drift', $data->totalDriftCount) }}
+                        {{ $data->totalDriftCount }} {{ Str::plural('drift', $data->totalDriftCount) }}
                     </span>
                     <span class="text-xs text-gray-500 dark:text-gray-400">
-                        across {{ $data->packagesChecked }}
-                        {{ Str::plural('package', $data->packagesChecked) }}
+                        across {{ $data->packagesChecked }} {{ Str::plural('package', $data->packagesChecked) }}
                     </span>
                 </div>
 

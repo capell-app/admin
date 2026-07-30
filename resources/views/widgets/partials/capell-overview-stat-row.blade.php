@@ -22,13 +22,13 @@
 
 <div
     @class([
-        'shrink-0 text-right text-xl leading-6 font-semibold text-gray-950 transition dark:text-white',
-        'text-primary-600 dark:text-primary-400' => $stat->color === 'primary',
-        'text-success-600 dark:text-success-400' => $stat->color === 'success',
-        'text-warning-600 dark:text-warning-400' => $stat->color === 'warning',
-        'text-danger-600 dark:text-danger-400' => $stat->color === 'danger',
-        'group-hover:text-primary-600 dark:group-hover:text-primary-400' => $stat->url !== null,
-    ])
+    'shrink-0 text-right text-xl leading-6 font-semibold text-gray-950 transition dark:text-white',
+    'text-primary-600 dark:text-primary-400' => $stat->color === 'primary',
+    'text-success-600 dark:text-success-400' => $stat->color === 'success',
+    'text-warning-600 dark:text-warning-400' => $stat->color === 'warning',
+    'text-danger-600 dark:text-danger-400' => $stat->color === 'danger',
+    'group-hover:text-primary-600 dark:group-hover:text-primary-400' => $stat->url !== null,
+])
 >
     {{ $stat->value }}
 </div>

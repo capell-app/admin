@@ -54,16 +54,12 @@
     @endif
 
     @if ($fieldDiffs === [])
-        <p class="text-gray-600 dark:text-gray-300">
-            {{ __('capell-admin::event-sourcing.rollback_no_changes') }}
-        </p>
+        <p class="text-gray-600 dark:text-gray-300">{{ __('capell-admin::event-sourcing.rollback_no_changes') }}</p>
     @else
         <div class="divide-y divide-gray-100 dark:divide-gray-800">
             @foreach ($fieldDiffs as $field)
                 <div class="py-3">
-                    <p class="font-medium text-gray-700 dark:text-gray-200">
-                        {{ $field->label }}
-                    </p>
+                    <p class="font-medium text-gray-700 dark:text-gray-200">{{ $field->label }}</p>
                     <div class="mt-1 grid gap-2 sm:grid-cols-2">
                         <div class="rounded bg-gray-50 p-2 dark:bg-white/5">
                             <span
