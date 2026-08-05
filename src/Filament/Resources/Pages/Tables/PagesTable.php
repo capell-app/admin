@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Capell\Admin\Filament\Resources\Pages\Tables;
 
 use Capell\Admin\Actions\Blueprints\UpdateBlueprintAction;
+use Capell\Admin\Actions\Pages\BuildPageDeletionImpactAction;
 use Capell\Admin\Contracts\Extenders\PageTableExtender;
 use Capell\Admin\Contracts\Pages\PageTableStatusResolver;
 use Capell\Admin\Enums\FilamentColorEnum;
@@ -16,6 +17,7 @@ use Capell\Admin\Filament\Components\Tables\Columns\BlueprintColumn;
 use Capell\Admin\Filament\Components\Tables\Columns\DateColumn;
 use Capell\Admin\Filament\Components\Tables\Columns\IdentifierColumn;
 use Capell\Admin\Filament\Components\Tables\Columns\LanguagesColumn;
+use Capell\Admin\Filament\Components\Tables\Columns\Page\PageAvailabilityColumn;
 use Capell\Admin\Filament\Components\Tables\Columns\Page\PagePublishStatusColumn;
 use Capell\Admin\Filament\Components\Tables\Columns\Page\PageSummaryColumn;
 use Capell\Admin\Filament\Components\Tables\Columns\SiteColumn;
@@ -68,6 +70,8 @@ use Filament\Tables\Filters\TernaryFilter;
 use Filament\Tables\Filters\TrashedFilter;
 use Filament\Tables\Table;
 use Illuminate\Contracts\Database\Eloquent\Builder as BuilderContract;
+use Illuminate\Contracts\View\Factory;
+use Illuminate\Contracts\View\View;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Support\Collection;
@@ -132,6 +136,9 @@ class PagesTable implements TableConfigurator
                         }),
                     ReplicatePageAction::make(),
                     DeleteAction::make()
+                        ->modalContent(fn (PageModel $record): Factory|View => view('capell-admin::components.record-deletion-impact', [
+                            'impact' => BuildPageDeletionImpactAction::run($record),
+                        ]))
                         ->before(self::beforeRecordDelete(...))
                         ->after(self::afterRecordDeleted(...)),
                 ])
@@ -145,6 +152,9 @@ class PagesTable implements TableConfigurator
                 BulkMovePagesBulkAction::make(),
                 ...static::getExtenderBulkActions(),
                 DeleteBulkAction::make()
+                    ->modalContent(fn (EloquentCollection|Collection|LazyCollection $records): Factory|View => view('capell-admin::components.record-deletion-impact', [
+                        'impact' => resolve(BuildPageDeletionImpactAction::class)->handleMany($records),
+                    ]))
                     ->before(self::beforeBulkDelete(...))
                     ->after(self::afterBulkDelete(...)),
                 RestoreBulkAction::make(),
@@ -205,6 +215,14 @@ class PagesTable implements TableConfigurator
                 ->query(self::applyFilterQuery(...))
                 ->indicateUsing(self::indicateFilter(...)),
 
+            SelectFilter::make('missing_translation')
+                ->label(__('capell-admin::filter.missing_translation'))
+                ->searchable()
+                ->options(self::getLanguageOptions(...))
+                ->getSearchResultsUsing(self::getLanguageSearchResults(...))
+                ->query(self::applyMissingTranslationFilterQuery(...))
+                ->indicateUsing(self::indicateMissingTranslationFilter(...)),
+
             DateFilter::make('visible_from')
                 ->label(__('capell-admin::form.publish_date')),
 
@@ -213,6 +231,16 @@ class PagesTable implements TableConfigurator
                 ->native(false)
                 ->options(self::getPublishStatusFilterOptions())
                 ->query(self::applyPublishStatusFilterQuery(...)),
+
+            SelectFilter::make('availability')
+                ->label(__('capell-admin::table.page_availability'))
+                ->native(false)
+                ->options([
+                    'no_active_url' => __('capell-admin::table.page_availability_no_active_url'),
+                    'some_urls_disabled' => __('capell-admin::table.page_availability_some_urls_disabled'),
+                ])
+                ->query(self::applyAvailabilityFilterQuery(...))
+                ->indicateUsing(self::indicateAvailabilityFilter(...)),
 
             TrashedFilter::make()
                 ->native(false),
@@ -317,6 +345,37 @@ class PagesTable implements TableConfigurator
     }
 
     /**
+     * @param  Builder<PageModel>  $query
+     * @param  array<string, mixed>  $data
+     * @return Builder<PageModel>
+     */
+    protected static function applyAvailabilityFilterQuery(Builder $query, array $data): Builder
+    {
+        $value = is_string($data['value'] ?? null) ? $data['value'] : null;
+
+        return match ($value) {
+            'no_active_url' => $query->whereDoesntHave(
+                'pageUrls',
+                fn (BuilderContract $query): BuilderContract => $query->where('status', true),
+            ),
+            'some_urls_disabled' => $query
+                ->whereHas('pageUrls', fn (BuilderContract $query): BuilderContract => $query->where('status', true))
+                ->whereHas('pageUrls', fn (BuilderContract $query): BuilderContract => $query->where('status', false)),
+            default => $query,
+        };
+    }
+
+    /** @param array<string, mixed> $data */
+    protected static function indicateAvailabilityFilter(array $data): ?string
+    {
+        return match ($data['value'] ?? null) {
+            'no_active_url' => (string) __('capell-admin::table.page_availability_no_active_url'),
+            'some_urls_disabled' => (string) __('capell-admin::table.page_availability_some_urls_disabled'),
+            default => null,
+        };
+    }
+
+    /**
      * @param  Builder<Blueprint>  $query
      * @return Builder<Blueprint>
      */
@@ -393,6 +452,56 @@ class PagesTable implements TableConfigurator
         }
 
         return $indicators;
+    }
+
+    /**
+     * Matches pages that have no translation row for the chosen language, and pages
+     * whose row for that language carries neither a title nor content. A row cloned
+     * from the default language counts as translated: the blobs are not compared.
+     *
+     * @param  Builder<PageModel>  $query
+     * @param  array<string, mixed>  $data
+     * @return Builder<PageModel>
+     */
+    protected static function applyMissingTranslationFilterQuery(Builder $query, array $data): Builder
+    {
+        $languageId = $data['value'] ?? null;
+
+        if ($languageId === null || $languageId === '') {
+            return $query;
+        }
+
+        return $query->whereDoesntHave(
+            'translations',
+            fn (BuilderContract $query): BuilderContract => $query
+                ->where('language_id', (int) $languageId)
+                ->where(fn (BuilderContract $query): BuilderContract => $query
+                    ->where('title', '!=', '')
+                    ->orWhere('content', '!=', '')),
+        );
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     */
+    protected static function indicateMissingTranslationFilter(array $data): ?string
+    {
+        $languageId = $data['value'] ?? null;
+
+        if ($languageId === null || $languageId === '') {
+            return null;
+        }
+
+        /** @var class-string<Language> $model */
+        $model = Language::class;
+
+        $language = $model::query()->find($languageId);
+
+        if (! $language instanceof Language) {
+            return null;
+        }
+
+        return (string) __('capell-admin::filter.missing_translation_indicator', ['language' => $language->name]);
     }
 
     protected static function shouldShowSystemPagesFilter(ResourcePage|HasPageResource $livewire): bool
@@ -474,6 +583,7 @@ class PagesTable implements TableConfigurator
             ->with($relations)
             ->withCount([
                 'children',
+                'pageUrls',
             ])
             ->tap(fn (Builder $query): Builder => resolve(PageTableStatusResolver::class)->modifyQuery($query));
     }
@@ -539,6 +649,7 @@ class PagesTable implements TableConfigurator
                 ->sortable()
                 ->searchable(query: self::applyNameSearch(...))
                 ->toggleable(),
+            PageAvailabilityColumn::make('availability'),
             PagePublishStatusColumn::make('publish_status'),
             DateColumn::make('updated_at'),
             TextColumn::make('translation.title')
@@ -782,6 +893,7 @@ class PagesTable implements TableConfigurator
             'site_id',
             'blueprint_id',
             'filter',
+            'missing_translation',
             'layout_id',
             'visible_from',
             'trashed',
