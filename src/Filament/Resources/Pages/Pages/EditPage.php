@@ -241,8 +241,7 @@ class EditPage extends EditRecord implements HasPageResource, ValidatesDelete
     #[Override]
     public function getSubheading(): string|Htmlable|null
     {
-        $pageUrl = $this->record->pageUrls->first();
-        $fullUrl = $pageUrl instanceof PageUrl ? PageUrlPresenter::fullUrl($pageUrl) : null;
+        $fullUrl = PageUrlPresenter::fullUrl($this->record->pageUrl);
         $summary = view('capell-admin::components.record-state-summary', [
             'states' => $this->recordStates(),
             // Children/hierarchy counts are Page-specific (nested-set behaviour
@@ -317,6 +316,7 @@ class EditPage extends EditRecord implements HasPageResource, ValidatesDelete
         if ($handler !== null) {
             $this->callDraftHandler($handler, 'saveAsDraft', $this);
             $this->discardEditorScratchDraft();
+            $this->notifyEditorSaved();
 
             return;
         }
@@ -340,6 +340,7 @@ class EditPage extends EditRecord implements HasPageResource, ValidatesDelete
         if ($handler !== null) {
             $this->callDraftHandler($handler, 'saveAsDraftWithLocation', $this, $data);
             $this->discardEditorScratchDraft();
+            $this->notifyEditorSaved();
         }
     }
 
@@ -429,6 +430,35 @@ class EditPage extends EditRecord implements HasPageResource, ValidatesDelete
         }
     }
 
+    #[Override]
+    protected function getSavedNotification(): ?Notification
+    {
+        $notification = parent::getSavedNotification();
+
+        if (! $notification instanceof Notification) {
+            return null;
+        }
+
+        $pageUrlString = PageUrlPresenter::fullUrl($this->record->pageUrl);
+
+        if (is_string($pageUrlString) && $pageUrlString !== '') {
+            $notification->actions(
+                array_merge(
+                    $notification->getActions(),
+                    [
+                        Action::make('view-page')
+                            ->label(__('capell-admin::button.view_page'))
+                            ->url($pageUrlString)
+                            ->openUrlInNewTab()
+                            ->button(),
+                    ],
+                ),
+            );
+        }
+
+        return $notification;
+    }
+
     protected function afterSave(): void
     {
         /** @var Pageable<Model> $page */
@@ -442,6 +472,8 @@ class EditPage extends EditRecord implements HasPageResource, ValidatesDelete
         ));
 
         $this->discardEditorScratchDraft();
+
+        $this->notifyEditorSaved();
 
         $this->dispatch('refresh-alerts');
 
@@ -816,8 +848,7 @@ class EditPage extends EditRecord implements HasPageResource, ValidatesDelete
 
     private function pageDisplayUrl(): string
     {
-        $pageUrl = $this->record->pageUrls->first();
-        $displayUrl = $pageUrl instanceof PageUrl ? PageUrlPresenter::displayUrl($pageUrl) : '';
+        $displayUrl = PageUrlPresenter::displayUrl($this->record->pageUrl);
 
         return $displayUrl !== ''
             ? Str::limit($displayUrl, 72)
@@ -861,6 +892,20 @@ class EditPage extends EditRecord implements HasPageResource, ValidatesDelete
                         : '',
                     'csrfToken' => csrf_token(),
                     'intervalMs' => 30000,
+                    'initialConflict' => $this->hasConflictingContentLock(),
+                    'pageId' => (int) $this->record->getKey(),
+                    'storageKey' => $this->editorLocalDraftStorageKey(),
+                    'formSelector' => '#form',
+                    'localDraftDebounceMs' => 750,
+                    'localDraftTtlMs' => 86_400_000,
+                    'localDraftVersion' => 1,
+                    'localDraftAvailableMessage' => (string) __('capell-admin::scratch_drafts.local_available'),
+                    'localDraftRestoreLabel' => (string) __('capell-admin::scratch_drafts.local_restore'),
+                    'localDraftDiscardLabel' => (string) __('capell-admin::scratch_drafts.local_discard'),
+                    'contentLockReadOnlyMessage' => (string) __('capell-admin::message.content_lock_read_only'),
+                    'contentLockPermissionMessage' => (string) __('capell-admin::message.content_lock_permission'),
+                    'contentLockUnavailableMessage' => (string) __('capell-admin::message.content_lock_unavailable'),
+                    'contentLockTakeoverLabel' => (string) __('capell-admin::button.request_content_lock_takeover'),
                 ],
             ]);
     }
@@ -882,7 +927,11 @@ class EditPage extends EditRecord implements HasPageResource, ValidatesDelete
                     return;
                 }
 
+                Gate::forUser($user)->authorize('update', $this->record);
+
                 ForceContentLockAction::run($this->record, $user);
+
+                $this->dispatch('content-lock-taken-over', pageId: (int) $this->record->getKey());
 
                 Notification::make('content-lock-taken-over')
                     ->success()
@@ -904,6 +953,24 @@ class EditPage extends EditRecord implements HasPageResource, ValidatesDelete
         $user = Auth::user();
 
         return $user instanceof Authenticatable ? $user : null;
+    }
+
+    private function editorLocalDraftStorageKey(): string
+    {
+        $userId = $this->currentUser()?->getAuthIdentifier();
+        $userKey = is_scalar($userId) ? (string) $userId : 'anonymous';
+
+        return sprintf(
+            'capell:page-editor:%s:%s:%s',
+            $userKey,
+            (string) $this->record->getKey(),
+            app()->getLocale(),
+        );
+    }
+
+    private function notifyEditorSaved(): void
+    {
+        $this->dispatch('page-editor-saved', pageId: (int) $this->record->getKey());
     }
 
     private function discardEditorScratchDraft(): void

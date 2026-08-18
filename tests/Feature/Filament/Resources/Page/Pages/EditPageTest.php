@@ -17,6 +17,8 @@ use Capell\Admin\Filament\Resources\Pages\PageResource;
 use Capell\Admin\Filament\Resources\Pages\Pages\EditPage;
 use Capell\Admin\Filament\Resources\Pages\RelationManagers\UrlsRelationManager;
 use Capell\Admin\Settings\AdminSettings;
+use Capell\Admin\Support\PageUrlPresenter;
+use Capell\Core\Actions\Redirects\CreateAutomaticRedirectAction;
 use Capell\Core\Contracts\Pageable;
 use Capell\Core\Enums\ContentStructure;
 use Capell\Core\Enums\PageTypeEnum;
@@ -33,11 +35,14 @@ use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\Testing\TestAction;
+use Filament\Facades\Filament;
 use Filament\Forms\Components\Builder\Block;
+use Filament\Notifications\Notification;
 use Filament\Schemas\Schema;
 use Illuminate\Contracts\Support\Htmlable;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Date;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Str;
@@ -94,11 +99,54 @@ function groupedHeaderAction(EditPage $component, string $actionName): Action
     return $action;
 }
 
+/**
+ * @return array{canonical: PageUrl, redirect: PageUrl}
+ */
+function createPageUrlHistory(Page $page, string $canonicalUrl = '/current-page', string $redirectUrl = '/old-page'): array
+{
+    $canonical = $page->pageUrls()
+        ->whereNull('type')
+        ->where('language_id', $page->site->language_id)
+        ->firstOrFail();
+
+    $canonical->update(['url' => $canonicalUrl]);
+
+    expect(CreateAutomaticRedirectAction::run($page, $page->site->language, $redirectUrl, $canonicalUrl))->toBeTrue();
+
+    $redirect = PageUrl::query()
+        ->where('pageable_type', $page->getMorphClass())
+        ->where('pageable_id', $page->getKey())
+        ->where('url', $redirectUrl)
+        ->firstOrFail();
+
+    return [
+        'canonical' => $canonical->refresh(),
+        'redirect' => $redirect,
+    ];
+}
+
+function arrangePageUrlHistory(EditPage $component, PageUrl $canonical, PageUrl $redirect): void
+{
+    $component->record
+        ->setRelation('pageUrls', collect([$redirect, $canonical]))
+        ->setRelation('pageUrl', $canonical);
+}
+
 it('can render page', function (): void {
     get(PageResource::getUrl('edit', [
         'record' => Page::factory()->createOne(),
     ]))
         ->assertSuccessful();
+});
+
+it('enables Filament unsaved changes alerts for admin editing', function (): void {
+    $page = Page::factory()->createOne();
+
+    get(PageResource::getUrl('edit', [
+        'record' => $page,
+    ]))->assertSuccessful();
+
+    expect(Filament::getPanel('admin')->hasUnsavedChangesAlerts())->toBeTrue();
 });
 
 it('standard page relations survive blueprint relations without duplicates', function (): void {
@@ -233,6 +281,67 @@ it('shows page state and the page url as a link in the edit page subheading', fu
         ->not->toContain('/layouts/' . $layout->getKey());
 });
 
+it('uses the canonical page url in the edit page subheading when redirects exist', function (): void {
+    $site = Site::factory()
+        ->withTranslations(siteDomainData: [
+            'scheme' => 'https',
+            'domain' => 'example.test',
+            'path' => null,
+        ])
+        ->createOne();
+    $page = Page::factory()
+        ->site($site)
+        ->withTranslations()
+        ->createOne();
+    $urls = createPageUrlHistory($page);
+
+    $component = Livewire::test(EditPage::class, [
+        'record' => $page->getRouteKey(),
+    ])
+        ->assertSuccessful()
+        ->instance();
+
+    throw_unless($component instanceof EditPage, RuntimeException::class, 'Expected EditPage Livewire component instance.');
+
+    arrangePageUrlHistory($component, $urls['canonical'], $urls['redirect']);
+
+    $subheading = $component->getSubheading();
+
+    expect($subheading)->toBeInstanceOf(Htmlable::class);
+    assert($subheading instanceof Htmlable);
+
+    expect($subheading->toHtml())
+        ->toContain('https://example.test/current-page')
+        ->toContain('<a href="https://example.test/current-page"')
+        ->not->toContain('https://example.test/old-page');
+});
+
+it('renders the edit page without a canonical page url', function (): void {
+    $page = Page::factory()->withTranslations()->createOne();
+    PageUrl::query()
+        ->where('pageable_type', $page->getMorphClass())
+        ->where('pageable_id', $page->getKey())
+        ->delete();
+
+    expect($page->fresh()?->pageUrl)->toBeNull();
+
+    $component = Livewire::test(EditPage::class, [
+        'record' => $page->getRouteKey(),
+    ])
+        ->assertSuccessful();
+
+    $component->assertSee(__('capell-admin::table.page_health_missing_url'));
+
+    $method = new ReflectionMethod(EditPage::class, 'getSavedNotification');
+    $notification = $method->invoke($component->instance());
+
+    throw_unless($notification instanceof Notification, RuntimeException::class, 'Expected a saved notification from EditPage.');
+
+    expect(collect($notification->getActions())
+        ->first(fn (mixed $action): bool => $action instanceof Action && $action->getName() === 'view-page'))
+        ->toBeNull();
+});
+
 it('shows the draft preview action only for pending pages', function (): void {
     Route::get('/admin/preview/page/{page}', fn (): string => 'Preview')
         ->name('capell.admin.preview-page');
@@ -304,7 +413,10 @@ it('acquires a content lock when an editor opens a page', function (): void {
         'record' => $page,
     ]))
         ->assertSuccessful()
-        ->assertSee('data-capell-content-lock-heartbeat', false);
+        ->assertSee('data-capell-content-lock-heartbeat', false)
+        ->assertSee(__('capell-admin::scratch_drafts.local_available'))
+        ->assertSee(__('capell-admin::message.content_lock_read_only'))
+        ->assertSee(__('capell-admin::button.request_content_lock_takeover'));
 
     Livewire::test(EditPage::class, [
         'record' => $page->getRouteKey(),
@@ -419,6 +531,8 @@ it('warns and blocks saves while another editor has an active page lock', functi
     ])
         ->assertSuccessful()
         ->assertNotified(__('capell-admin::message.content_lock_active', ['name' => 'Ben']))
+        ->assertSee(__('capell-admin::message.content_lock_read_only'))
+        ->assertSee(__('capell-admin::button.request_content_lock_takeover'))
         ->fillForm([
             'name' => 'Blocked Name',
         ])
@@ -454,6 +568,7 @@ it('lets an editor explicitly take over an active page lock', function (): void 
         ->assertActionVisible('take-over-content-lock')
         ->callAction('take-over-content-lock')
         ->assertHasNoActionErrors()
+        ->assertDispatched('content-lock-taken-over', pageId: $page->getKey())
         ->assertNotified(__('capell-admin::message.content_lock_taken_over'));
 
     $lock = ContentLock::query()->sole();
@@ -462,6 +577,38 @@ it('lets an editor explicitly take over an active page lock', function (): void 
         ->and($lock->model_type)->toBe($page->getMorphClass())
         ->and($lock->model_id)->toBe($page->getKey())
         ->and($lock->expires_at->toDateTimeString())->toBe('2026-05-31 10:15:00');
+
+    Date::setTestNow();
+});
+
+it('rechecks page update authorization when taking over an active page lock', function (): void {
+    $page = Page::factory()->createOne();
+    $owner = test()->createUser(['name' => 'Ben']);
+
+    Permission::findOrCreate('Update:Page');
+    $otherEditor = test()->createUser(['name' => 'Read-only Editor']);
+
+    Date::setTestNow('2026-05-31 10:00:00');
+
+    ContentLock::query()->create([
+        'user_id' => $owner->getKey(),
+        'model_type' => $page->getMorphClass(),
+        'model_id' => $page->getKey(),
+        'expires_at' => Date::now()->addMinutes(15),
+    ]);
+
+    $component = Livewire::test(EditPage::class, [
+        'record' => $page->getRouteKey(),
+    ])->assertSuccessful()->assertActionVisible('take-over-content-lock');
+
+    test()->actingAs($otherEditor);
+
+    expect(Gate::forUser($otherEditor)->denies('update', $page))->toBeTrue();
+
+    expect(fn (): mixed => $component->callAction('take-over-content-lock'))
+        ->toThrow(ErrorException::class);
+
+    expect(ContentLock::query()->sole()->user_id)->toBe($owner->getKey());
 
     Date::setTestNow();
 });
@@ -1515,4 +1662,40 @@ it('warns editors when the page type content structure changes', function (): vo
 
     expect($component->instance()->record->refresh()->content_structure)
         ->toBe(ContentStructure::Blocks);
+});
+
+it('adds a view-page notification action for the current page URL', function (): void {
+    $site = Site::factory()->withTranslations()->createOne();
+    $page = Page::factory()
+        ->site($site)
+        ->withTranslations()
+        ->createOne();
+
+    $urls = createPageUrlHistory($page, '/notification-test', '/superseded-notification-test');
+
+    $component = Livewire::test(EditPage::class, [
+        'record' => $page->getRouteKey(),
+    ])
+        ->assertSuccessful()
+        ->instance();
+
+    throw_unless($component instanceof EditPage, RuntimeException::class, 'Expected EditPage Livewire component instance.');
+
+    arrangePageUrlHistory($component, $urls['canonical'], $urls['redirect']);
+
+    $method = new ReflectionMethod(EditPage::class, 'getSavedNotification');
+    $notification = $method->invoke($component);
+
+    throw_unless($notification instanceof Notification, RuntimeException::class, 'Expected a saved notification from EditPage.');
+
+    $viewAction = collect($notification->getActions())
+        ->first(fn (mixed $action): bool => $action instanceof Action && $action->getName() === 'view-page');
+
+    expect($viewAction)->toBeInstanceOf(Action::class);
+
+    throw_unless($viewAction instanceof Action, RuntimeException::class, 'Expected a view-page notification action from EditPage.');
+
+    expect($viewAction->getUrl())->toBe(PageUrlPresenter::fullUrl($urls['canonical']))
+        ->not->toBe(PageUrlPresenter::fullUrl($urls['redirect']))
+        ->and($viewAction->shouldOpenUrlInNewTab())->toBeTrue();
 });
