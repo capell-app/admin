@@ -36,17 +36,22 @@ use Capell\Admin\Contracts\Extenders\PageExportExtender;
 use Capell\Admin\Contracts\Extenders\PageTableExtender;
 use Capell\Admin\Contracts\Extenders\PublishPanelExtender;
 use Capell\Admin\Contracts\Extensions\ExtensionRemovalCoordinator;
+use Capell\Admin\Contracts\Extensions\ExtensionTableDataSource;
 use Capell\Admin\Contracts\Media\AdminMediaFieldFactory;
 use Capell\Admin\Contracts\Pages\PageTableStatusResolver;
 use Capell\Admin\Contracts\RegistryInspectorInterface;
 use Capell\Admin\Contracts\Support\FlagIconRenderer as FlagIconRendererContract;
 use Capell\Admin\Data\AdminAssetData;
 use Capell\Admin\Data\AdminSurfaceContributionData;
+use Capell\Admin\Data\AdminZoneContextData;
+use Capell\Admin\Data\AdminZoneContributionData;
 use Capell\Admin\Data\Dashboard\DashboardAnalyticsSnapshotData;
 use Capell\Admin\Data\ImportEntryData;
 use Capell\Admin\Data\Reports\ReportDefinitionData;
 use Capell\Admin\Enums\AdminAssetEnum;
 use Capell\Admin\Enums\AdminNotificationGroupEnum;
+use Capell\Admin\Enums\AdminSurfaceContributionType;
+use Capell\Admin\Enums\AdminZone;
 use Capell\Admin\Enums\DashboardEnum;
 use Capell\Admin\Enums\DashboardRegionEnum;
 use Capell\Admin\Enums\FilamentWidgetEnum;
@@ -57,11 +62,14 @@ use Capell\Admin\Facades\CapellAdmin;
 use Capell\Admin\Filament\Imports\RedirectImporter;
 use Capell\Admin\Filament\Livewire\PageScratchDraftPanel;
 use Capell\Admin\Filament\Livewire\PublishStatusPanel;
+use Capell\Admin\Filament\Pages\Extensions\Tables\ExtensionsTable;
+use Capell\Admin\Filament\Pages\ExtensionsPage;
 use Capell\Admin\Filament\Pages\Reports\AccessibilityReadinessReport;
 use Capell\Admin\Filament\Pages\Reports\DemoInstallHealthReport;
 use Capell\Admin\Filament\Pages\Reports\PackageReadinessReport;
 use Capell\Admin\Filament\Pages\Reports\PublicRenderSafetyReport;
 use Capell\Admin\Filament\Pages\Reports\PublishingReadinessReport;
+use Capell\Admin\Filament\Resources\Pages\Tables\PagesTable;
 use Capell\Admin\Filament\Resources\Redirects\Pages\ManageRedirects;
 use Capell\Admin\Filament\Resources\Redirects\RedirectResource;
 use Capell\Admin\Filament\Settings\AdminSettingsSchema;
@@ -93,6 +101,7 @@ use Capell\Admin\Filament\Widgets\MarketingStudio\MarketingStudioLaunchReadiness
 use Capell\Admin\Filament\Widgets\MarketingStudio\MarketingStudioQuickActionsFilamentWidget;
 use Capell\Admin\Filament\Widgets\MarketingStudio\MarketingStudioTimelineFilamentWidget;
 use Capell\Admin\Filament\Widgets\MarketingStudio\MarketingStudioWorkQueueFilamentWidget;
+use Capell\Admin\Listeners\RememberPageUrlRewriteForPrompt;
 use Capell\Admin\Livewire\Header\AdminTools;
 use Capell\Admin\Livewire\Header\AdminWorkspaceSwitcher;
 use Capell\Admin\Livewire\Header\NavigationTree;
@@ -127,6 +136,7 @@ use Capell\Admin\Support\AdminResourceResolver;
 use Capell\Admin\Support\AdminRuntimeActivator;
 use Capell\Admin\Support\AdminSurfaceContributionCache;
 use Capell\Admin\Support\AdminSurfaceContributionRegistry;
+use Capell\Admin\Support\AdminZoneRegistry;
 use Capell\Admin\Support\Backup\NullPageExporter;
 use Capell\Admin\Support\Bridges\AdminBridgeRegistrar;
 use Capell\Admin\Support\Bridges\AdminBridgeRegistry;
@@ -165,12 +175,12 @@ use Capell\Admin\Support\Makers\AdminBladeComponentMaker;
 use Capell\Admin\Support\Makers\AdminConfiguratorMaker;
 use Capell\Admin\Support\Makers\FilamentWidgetMaker;
 use Capell\Admin\Support\MarketingStudio\MarketingStudioActionRegistry;
-use Capell\Admin\Support\Media\LegacyAdminMediaFieldFactoryAdapter;
 use Capell\Admin\Support\Media\LegacyAwareAdminMediaFieldFactory;
 use Capell\Admin\Support\Media\MediaDuplicateIndex;
 use Capell\Admin\Support\Navigation\AdminNavigationBadgeCountCache;
 use Capell\Admin\Support\Notifications\AdminNotificationGroupRegistry;
 use Capell\Admin\Support\Pages\DefaultPageTableStatusResolver;
+use Capell\Admin\Support\Pages\PageUrlRewritePromptState;
 use Capell\Admin\Support\Publish\WorkflowPublishPanelExtender;
 use Capell\Admin\Support\Redirects\RedirectHealthRequestCache;
 use Capell\Admin\Support\Reports\ReportRegistry;
@@ -192,10 +202,10 @@ use Capell\Core\Contracts\AdminResourceResolver as AdminResourceResolverContract
 use Capell\Core\Contracts\DoctorCheck;
 use Capell\Core\Contracts\FrontendRouteReservationContributor;
 use Capell\Core\Contracts\Makers\MakerRegistryInterface;
-use Capell\Core\Contracts\Media\MediaFieldFactory;
 use Capell\Core\Contracts\Redirects\RedirectUrlRecorder;
 use Capell\Core\Enums\BlueprintSubjectEnum;
 use Capell\Core\Enums\PageTypeEnum;
+use Capell\Core\Events\PageUrlsRewritten;
 use Capell\Core\Facades\CapellCore;
 use Capell\Core\Models\Blueprint;
 use Capell\Core\Models\Language;
@@ -206,6 +216,8 @@ use Capell\Core\Models\PageUrl;
 use Capell\Core\Models\Site;
 use Capell\Core\Providers\CapellServiceProvider;
 use Capell\Core\Settings\CoreSettings;
+use Capell\Core\Support\Extensions\ExtensionOrderingAudit;
+use Capell\Core\Support\Extensions\ExtensionPosition;
 use Capell\Core\Support\Packages\AbstractPackageServiceProvider;
 use Capell\Core\Support\Redirects\PageUrlRedirectUrlRecorder;
 use Capell\Core\Support\Settings\SettingsGroupMetadata;
@@ -290,7 +302,12 @@ class AdminServiceProvider extends AbstractPackageServiceProvider
         $this->app->singleton(StaticSiteGenerationDispatcher::class, UnavailableStaticSiteGenerationDispatcher::class);
 
         $this->app->bind(AdminMediaFieldFactory::class, LegacyAwareAdminMediaFieldFactory::class);
-        $this->app->bind(MediaFieldFactory::class, LegacyAdminMediaFieldFactoryAdapter::class);
+        // Keep the legacy class names as strings so existing package bindings
+        // remain available without creating new deprecated symbol references.
+        $this->app->bind(
+            'Capell\\Core\\Contracts\\Media\\MediaFieldFactory',
+            'Capell\\Admin\\Support\\Media\\LegacyAdminMediaFieldFactoryAdapter',
+        );
         $this->app->bind(AdminPanelUrlResolver::class, FilamentAdminPanelUrlResolver::class);
         $this->app->tag([AdminUserAccessCheck::class], DoctorCheck::TAG);
         $this->app->singleton(EnumPresentationRegistry::class);
@@ -311,7 +328,36 @@ class AdminServiceProvider extends AbstractPackageServiceProvider
         $this->app->singleton(AdminNotificationGroupRegistry::class);
         $this->app->singleton(WidgetDiscovery::class);
         $this->app->singleton(ActivityResourceLinkRegistry::class);
+        $this->app->singleton(AdminZoneRegistry::class);
         $this->app->singleton(AdminSurfaceContributionRegistry::class);
+
+        $orderingAudit = $this->app->make(ExtensionOrderingAudit::class);
+        if (! $orderingAudit->hasSource(AdminZoneRegistry::class)) {
+            $orderingAudit->register(AdminZoneRegistry::class, static function (): array {
+                $diagnostics = [];
+                $adminZoneRegistry = resolve(AdminZoneRegistry::class);
+
+                foreach (AdminZone::cases() as $zone) {
+                    array_push($diagnostics, ...$adminZoneRegistry->orderingDiagnostics($zone));
+                }
+
+                return $diagnostics;
+            });
+        }
+
+        if (! $orderingAudit->hasSource(AdminSurfaceContributionRegistry::class)) {
+            $orderingAudit->register(AdminSurfaceContributionRegistry::class, static function (): array {
+                $diagnostics = [];
+                $adminSurfaceContributionRegistry = resolve(AdminSurfaceContributionRegistry::class);
+
+                foreach (AdminSurfaceContributionType::cases() as $type) {
+                    array_push($diagnostics, ...$adminSurfaceContributionRegistry->orderingDiagnostics($type));
+                }
+
+                return $diagnostics;
+            });
+        }
+
         $this->app->singleton(AdminSurfaceContributionCache::class);
         $this->app->singleton(ReportRegistry::class);
         $this->app->singleton(DashboardFilamentWidgetRegistry::class);
@@ -320,6 +366,7 @@ class AdminServiceProvider extends AbstractPackageServiceProvider
         $this->app->singleton(AdminWorkspaceRegistry::class);
         $this->app->singleton(AdminWorkspacePreferenceStore::class);
         $this->app->scoped(AdminWorkspaceNavigator::class);
+        $this->app->scoped(PageUrlRewritePromptState::class);
         $this->app->scoped(UserMenuItemResolver::class);
         $this->app->singleton(OverviewStatRegistry::class);
         $this->app->singleton(AdminBridgeRegistry::class);
@@ -420,6 +467,7 @@ class AdminServiceProvider extends AbstractPackageServiceProvider
             ->registerSubscribers()
             ->registerModelInterceptors()
             ->registerAdminEventSystem()
+            ->registerPageUrlRewritePrompt()
             ->registerActAsOwnerAuditing()
             ->registerEventSourcingBridges()
             ->registerPolicies()
@@ -460,6 +508,7 @@ class AdminServiceProvider extends AbstractPackageServiceProvider
     private function prepareAdminRuntime(): self
     {
         return $this
+            ->registerAdminZones()
             ->registerMacros()
             ->registerPages()
             ->registerCoreReports()
@@ -469,10 +518,81 @@ class AdminServiceProvider extends AbstractPackageServiceProvider
             ->registerOverviewStats();
     }
 
+    private function registerAdminZones(): self
+    {
+        resolve(AdminZoneRegistry::class)->register(new AdminZoneContributionData(
+            zone: AdminZone::PageListTableColumns,
+            key: 'capell-admin.pages.list.table.columns',
+            resolver: static fn (AdminZoneContextData $context): array => PagesTable::defaultTableColumns(),
+            position: ExtensionPosition::first(),
+            owner: 'capell-app/admin',
+            source: self::class,
+        ));
+
+        resolve(AdminZoneRegistry::class)->register(new AdminZoneContributionData(
+            zone: AdminZone::ExtensionsDashboardHeaderActions,
+            key: 'capell-admin.extensions.dashboard.header-actions',
+            resolver: static fn (AdminZoneContextData $context): array => $context->subject instanceof ExtensionsPage
+                ? array_values(resolve(ExtensionsPageActionRegistry::class)->headerActions($context->subject))
+                : [],
+            position: ExtensionPosition::first(),
+            owner: 'capell-app/admin',
+            source: self::class,
+        ));
+
+        resolve(AdminZoneRegistry::class)->register(new AdminZoneContributionData(
+            zone: AdminZone::ExtensionsDashboardHeaderWidgets,
+            key: 'capell-admin.extensions.dashboard.header-widgets',
+            resolver: static fn (AdminZoneContextData $context): array => $context->subject instanceof ExtensionsPage
+                ? [ExtensionStatsOverviewFilamentWidget::class]
+                : [],
+            position: ExtensionPosition::first(),
+            owner: 'capell-app/admin',
+            source: self::class,
+        ));
+
+        resolve(AdminZoneRegistry::class)->register(new AdminZoneContributionData(
+            zone: AdminZone::ExtensionsDashboardTableFilters,
+            key: 'capell-admin.extensions.dashboard.table.filters',
+            resolver: static fn (AdminZoneContextData $context): array => $context->subject instanceof ExtensionTableDataSource
+                ? array_values(ExtensionsTable::defaultTableFilters($context->subject))
+                : [],
+            position: ExtensionPosition::first(),
+            owner: 'capell-app/admin',
+            source: self::class,
+        ));
+
+        resolve(AdminZoneRegistry::class)->register(new AdminZoneContributionData(
+            zone: AdminZone::ExtensionsDashboardTableColumns,
+            key: 'capell-admin.extensions.dashboard.table.columns',
+            resolver: static fn (AdminZoneContextData $context): array => $context->subject instanceof ExtensionTableDataSource
+                ? array_values(ExtensionsTable::defaultTableColumns())
+                : [],
+            position: ExtensionPosition::first(),
+            owner: 'capell-app/admin',
+            source: self::class,
+        ));
+
+        resolve(AdminZoneRegistry::class)->register(new AdminZoneContributionData(
+            zone: AdminZone::ExtensionsDashboardTableRecordActions,
+            key: 'capell-admin.extensions.dashboard.table.record-actions',
+            resolver: static fn (AdminZoneContextData $context): array => $context->subject instanceof ExtensionTableDataSource
+                ? array_values(ExtensionsTable::defaultTableActions())
+                : [],
+            position: ExtensionPosition::first(),
+            owner: 'capell-app/admin',
+            source: self::class,
+        ));
+
+        return $this;
+    }
+
     private function activateAdminRuntime(): self
     {
-        return $this
-            ->registerAssets();
+        $this->registerAssets();
+        resolve(AdminZoneRegistry::class)->freeze();
+
+        return $this;
     }
 
     private function registerResources(): self
@@ -871,6 +991,13 @@ class AdminServiceProvider extends AbstractPackageServiceProvider
         $this->app->singleton(AdminEventRegistry::class);
 
         $this->app->singleton(AdminEventRouter::class);
+
+        return $this;
+    }
+
+    private function registerPageUrlRewritePrompt(): self
+    {
+        Event::listen(PageUrlsRewritten::class, [RememberPageUrlRewriteForPrompt::class, 'handle']);
 
         return $this;
     }
