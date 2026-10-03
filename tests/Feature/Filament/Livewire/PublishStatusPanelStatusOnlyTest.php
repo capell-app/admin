@@ -3,9 +3,11 @@
 declare(strict_types=1);
 
 use Capell\Admin\Filament\Livewire\PublishStatusPanel;
+use Capell\Admin\Tests\Fixtures\Publishing\SharedStatusRecordPolicy;
 use Capell\Admin\Tests\Fixtures\Publishing\StatusOnlyRecord;
 use Capell\Tests\Support\Concerns\CreatesAdminUser;
 use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Schema;
 use Livewire\Features\SupportTesting\Testable;
 use Livewire\Livewire;
@@ -17,6 +19,8 @@ beforeEach(function (): void {
         $table->id();
         $table->boolean('status')->default(true);
     });
+
+    Gate::policy(StatusOnlyRecord::class, SharedStatusRecordPolicy::class);
 });
 
 function statusOnlyPanel(StatusOnlyRecord $record): Testable
@@ -57,4 +61,17 @@ it('shows an Active badge instead of a publish-status badge', function (): void 
     statusOnlyPanel($record)
         ->assertSee(__('capell-admin::publish_panel.status_active'))
         ->assertDontSee(__('capell-admin::publish_panel.not_published'));
+});
+
+it('ignores a saved page with the same identifier as a non-page resource', function (): void {
+    test()->actingAsAdmin();
+    $record = StatusOnlyRecord::query()->create(['status' => true]);
+    $component = statusOnlyPanel($record)->instance();
+    $view = $component->viewData;
+    $record->update(['status' => false]);
+
+    $component->refreshAfterPageSaved((int) $record->getKey());
+
+    expect($component->viewData)->toBe($view)
+        ->and($component->viewData->isEnabled())->toBeTrue();
 });

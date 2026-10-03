@@ -12,6 +12,7 @@ use Capell\Core\Data\PageVariationData;
 use Capell\Core\Facades\CapellCore;
 use Capell\Core\Facades\CapellDatabase;
 use Capell\Core\Models\Page;
+use Capell\Core\Support\Permissions\SiteAccess;
 use Closure;
 use Filament\Forms\Components\Select;
 use Illuminate\Database\Eloquent\Builder;
@@ -107,7 +108,7 @@ class PageMorphToOptionSelect extends OptionMorphToSelect
                 /** @var ?Page $page */
                 $page = $query
                     ->with(['pageUrls', 'ancestors'])
-                    ->withCount(['children', 'pageUrls'])
+                    ->withCount(['children' => fn (Builder $query): Builder => SiteAccess::current()->scope($query), 'pageUrls'])
                     ->where($keyName, $value)
                     ->first();
 
@@ -133,7 +134,7 @@ class PageMorphToOptionSelect extends OptionMorphToSelect
     private function getOptionsQuery(Select $component, PageVariationData $pageData): Builder
     {
         $model = $pageData->model;
-        $query = $model::query();
+        $query = SiteAccess::current()->query($model);
 
         if (! $this->modifyKeySelectOptionsQueryUsing instanceof Closure) {
             return $query;
@@ -157,7 +158,7 @@ class PageMorphToOptionSelect extends OptionMorphToSelect
         /** @var array<int|string, string> $options */
         $options = $query
             ->with(['pageUrls', 'ancestors'])
-            ->withCount(['children', 'pageUrls'])
+            ->withCount(['children' => fn (Builder $query): Builder => SiteAccess::current()->scope($query), 'pageUrls'])
             ->get()
             ->mapWithKeys(fn (Model $record): array => [$record->getAttribute($keyName) => $this->pageOption($record, $titleAttribute)])
             ->all();

@@ -10,12 +10,15 @@ use Capell\Core\Contracts\Pageable;
 use Capell\Core\Models\Page;
 use Capell\Core\Models\PageUrl;
 use Capell\Core\Models\SiteDomain;
+use Capell\Core\Support\Permissions\SiteAccess;
 use Closure;
 use Exception;
 use Filament\Support\Enums\FontWeight;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\HtmlString;
+use Override;
 
 class PageNameColumn extends BadgeableColumn
 {
@@ -27,6 +30,7 @@ class PageNameColumn extends BadgeableColumn
 
     protected string $resolveRecordKey = 'id';
 
+    #[Override]
     protected function setUp(): void
     {
         parent::setUp();
@@ -60,7 +64,7 @@ class PageNameColumn extends BadgeableColumn
 
                 if ($page->hasPageHierarchy() && $this->hasChildren()) {
                     if ($page->getAttributeValue('children_count') === null) {
-                        $page->loadCount(['children']);
+                        $page->loadCount(['children' => fn (Builder $query): Builder => SiteAccess::current()->scope($query)]);
                     }
 
                     if ($page->children_count > 0) {
@@ -112,7 +116,11 @@ class PageNameColumn extends BadgeableColumn
             $page = $this->resolvePageRecord($record);
             $pageUrl = $this->resolveRenderablePageUrl($page);
 
-            if (! $pageUrl instanceof PageUrl || $pageUrl->url === '/') {
+            if (! $pageUrl instanceof PageUrl) {
+                return new HtmlString(e(__('capell-admin::table.page_health_missing_url')));
+            }
+
+            if ($pageUrl->url === '/') {
                 return null;
             }
 
@@ -230,7 +238,7 @@ class PageNameColumn extends BadgeableColumn
     {
         $ancestors = $page instanceof Model && $page->relationLoaded('ancestors')
             ? $page->getRelation('ancestors')
-            : $page->ancestors()->get();
+            : SiteAccess::current()->scope($page->ancestors()->getQuery())->get();
 
         if (! $ancestors instanceof EloquentCollection) {
             return null;
@@ -259,7 +267,7 @@ class PageNameColumn extends BadgeableColumn
 
         $pageUrl = $page->pageUrl;
 
-        if (! $pageUrl->exists) {
+        if (! $pageUrl instanceof PageUrl || ! $pageUrl->exists) {
             return null;
         }
 

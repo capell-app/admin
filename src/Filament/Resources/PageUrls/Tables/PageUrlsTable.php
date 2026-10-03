@@ -6,6 +6,7 @@ namespace Capell\Admin\Filament\Resources\PageUrls\Tables;
 
 use Capell\Admin\Enums\PageUrlTypeEnum;
 use Capell\Admin\Enums\ResourceEnum;
+use Capell\Admin\Filament\Actions\ForceDeleteBulkAction;
 use Capell\Admin\Filament\Components\Tables\Actions\EditAction;
 use Capell\Admin\Filament\Components\Tables\Columns\DateColumn;
 use Capell\Admin\Filament\Components\Tables\Columns\IdentifierColumn;
@@ -17,16 +18,15 @@ use Capell\Admin\Filament\Resources\PageUrls\Schemas\PageUrlForm;
 use Capell\Admin\Support\AdminSurfaceLookup;
 use Capell\Admin\Support\DatabaseUrlExpression;
 use Capell\Admin\Support\PageUrlPresenter;
-use Capell\Admin\Support\SiteScope;
 use Capell\Core\Data\Database\SqlFragment;
 use Capell\Core\Data\PageVariationData;
 use Capell\Core\Facades\CapellCore;
 use Capell\Core\Models\PageUrl;
+use Capell\Core\Support\Permissions\SiteAccess;
 use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\DeleteBulkAction;
-use Filament\Actions\ForceDeleteBulkAction;
 use Filament\Actions\ReplicateAction;
 use Filament\Actions\RestoreBulkAction;
 use Filament\Schemas\Schema;
@@ -98,7 +98,7 @@ class PageUrlsTable implements TableConfigurator
                     ->relationship(
                         name: 'site',
                         titleAttribute: 'name',
-                        modifyQueryUsing: fn (Builder $query): Builder => SiteScope::applyForCurrentActor($query, 'id'),
+                        modifyQueryUsing: fn (Builder $query): Builder => SiteAccess::current()->scope($query, 'id'),
                     ),
                 SelectFilter::make('language_id')
                     ->label(__('capell-admin::form.language'))

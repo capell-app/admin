@@ -31,11 +31,13 @@ use Capell\Admin\Enums\ConfiguratorTypeEnum;
 use Capell\Admin\Enums\ListenerEnum;
 use Capell\Admin\Enums\PageEditorLockOperation;
 use Capell\Admin\Enums\ResourceEnum;
+use Capell\Admin\Filament\Actions\ForceDeleteAction;
 use Capell\Admin\Filament\Actions\Page\CreatePageAction;
 use Capell\Admin\Filament\Actions\Page\DeletePageAction;
 use Capell\Admin\Filament\Actions\Page\FrontendResourceDiagnosticsHeaderAction;
 use Capell\Admin\Filament\Actions\Page\FrontendSourceMapHeaderAction;
 use Capell\Admin\Filament\Actions\Page\ReplicatePageAction;
+use Capell\Admin\Filament\Actions\RestorePageAction;
 use Capell\Admin\Filament\Concerns\HasAncestorBreadcrumbs;
 use Capell\Admin\Filament\Concerns\HasBlueprintRelationManagers;
 use Capell\Admin\Filament\Concerns\HasConfigurableFormActionPosition;
@@ -65,10 +67,9 @@ use Capell\Core\Models\Page;
 use Capell\Core\Models\PageUrl;
 use Capell\Core\Models\Translation;
 use Capell\Core\Support\CapellCoreHelper;
+use Capell\Core\Support\Permissions\SiteAccess;
 use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
-use Filament\Actions\ForceDeleteAction;
-use Filament\Actions\RestoreAction;
 use Filament\Facades\Filament;
 use Filament\Notifications\Notification;
 use Filament\Pages\Concerns\InteractsWithFormActions;
@@ -644,7 +645,7 @@ class EditPage extends EditRecord implements HasPageResource, ValidatesDelete
                 ->modalSubmitAction(false)
                 ->visible(fn (): bool => Gate::allows('update', $this->record)),
             $this->takeOverContentLockAction(),
-            RestoreAction::make()
+            RestorePageAction::make()
                 ->icon('heroicon-m-arrow-uturn-left'),
             $this->deletePageAction(),
             ForceDeleteAction::make()
@@ -746,7 +747,7 @@ class EditPage extends EditRecord implements HasPageResource, ValidatesDelete
             'pageUrls.language',
         ])
             ->loadCount([
-                'canonicalPages',
+                'canonicalPages' => fn (Builder $query): Builder => SiteAccess::current()->scope($query),
             ]);
 
         if ($this->hasPageHierarchy() && $record->parent_id !== null && $record->parent_id !== 0) {
@@ -766,8 +767,8 @@ class EditPage extends EditRecord implements HasPageResource, ValidatesDelete
                 },
             ])
                 ->loadCount([
-                    'children',
-                    'siblings',
+                    'children' => fn (Builder $query): Builder => SiteAccess::current()->scope($query),
+                    'siblings' => fn (Builder $query): Builder => SiteAccess::current()->scope($query),
                 ]);
         }
 
@@ -1221,7 +1222,7 @@ class EditPage extends EditRecord implements HasPageResource, ValidatesDelete
 
         $selectedLangIds = array_map(intval(...), $selectedLangIds);
 
-        $parent = Page::query()
+        $parent = SiteAccess::current()->query(Page::class)
             ->withWhereHas('blueprint')
             ->withWhereHas('translations')
             ->firstWhere('id', $parentId);

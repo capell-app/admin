@@ -120,11 +120,15 @@ use Capell\Admin\Macros\Filament\TestableMacro;
 use Capell\Admin\Macros\Filament\TextInputMacro;
 use Capell\Admin\Observers\LayoutObserver as AdminLayoutObserver;
 use Capell\Admin\Observers\PageObserver as AdminPageObserver;
+use Capell\Admin\Policies\BlueprintPolicy;
+use Capell\Admin\Policies\LanguagePolicy;
 use Capell\Admin\Policies\LayoutPolicy;
 use Capell\Admin\Policies\MediaPolicy;
 use Capell\Admin\Policies\PagePolicy;
 use Capell\Admin\Policies\RedirectPolicy;
+use Capell\Admin\Policies\SiteDomainPolicy;
 use Capell\Admin\Policies\SitePolicy;
+use Capell\Admin\Policies\ThemePolicy;
 use Capell\Admin\Policies\UserPolicy;
 use Capell\Admin\Settings\AdminSettings;
 use Capell\Admin\Support\Activity\ActivityResourceLinkRegistry;
@@ -149,6 +153,7 @@ use Capell\Admin\Support\Bridges\AdminBridgeRegistry;
 use Capell\Admin\Support\Bridges\AdminNotificationPreferencesUserResourceBridge;
 use Capell\Admin\Support\Cache\UnavailableStaticSiteGenerationDispatcher;
 use Capell\Admin\Support\CapellAdminManager;
+use Capell\Admin\Support\ContentGraph\SharedDeleteImpact;
 use Capell\Admin\Support\Dashboard\AdminDashboardDataRequestCache;
 use Capell\Admin\Support\Dashboard\DashboardFilamentWidgetRegistry;
 use Capell\Admin\Support\Dashboard\DefaultDashboardAnalyticsDataProvider;
@@ -220,11 +225,14 @@ use Capell\Core\Models\Media;
 use Capell\Core\Models\Page;
 use Capell\Core\Models\PageUrl;
 use Capell\Core\Models\Site;
+use Capell\Core\Models\SiteDomain;
+use Capell\Core\Models\Theme;
 use Capell\Core\Providers\CapellServiceProvider;
 use Capell\Core\Settings\CoreSettings;
 use Capell\Core\Support\Extensions\ExtensionOrderingAudit;
 use Capell\Core\Support\Extensions\ExtensionPosition;
 use Capell\Core\Support\Packages\AbstractPackageServiceProvider;
+use Capell\Core\Support\Permissions\SiteAccess;
 use Capell\Core\Support\Redirects\PageUrlRedirectUrlRecorder;
 use Capell\Core\Support\Settings\SettingsGroupMetadata;
 use Capell\Core\ThemeStudio\Settings\ThemeStudioSettings;
@@ -241,7 +249,9 @@ use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Schemas\Components\Component;
 use Filament\Schemas\Schema;
+use Filament\Support\Assets\AlpineComponent;
 use Filament\Support\Assets\Css;
+use Filament\Support\Assets\Js;
 use Filament\Support\Facades\FilamentAsset;
 use Filament\Support\Icons\Heroicon;
 use Filament\Support\Livewire\Partials\DataStoreOverride;
@@ -257,6 +267,7 @@ use Livewire\Features\SupportTesting\Testable;
 use Livewire\Livewire;
 use Livewire\Mechanisms\DataStore;
 use Override;
+use RuntimeException;
 use Spatie\LaravelPackageTools\Package;
 
 class AdminServiceProvider extends AbstractPackageServiceProvider
@@ -354,6 +365,7 @@ class AdminServiceProvider extends AbstractPackageServiceProvider
         $this->app->singleton(ActivityResourceLinkRegistry::class);
         $this->app->singleton(AdminZoneRegistry::class);
         $this->app->singleton(AdminSurfaceContributionRegistry::class);
+        $this->app->scoped(SharedDeleteImpact::class);
 
         $orderingAudit = $this->app->make(ExtensionOrderingAudit::class);
         if (! $orderingAudit->hasSource(AdminZoneRegistry::class)) {
@@ -479,6 +491,24 @@ class AdminServiceProvider extends AbstractPackageServiceProvider
     #[Override]
     protected function bootPackage(): self
     {
+        $publishDirectory = realpath(__DIR__ . '/../../publishes');
+
+        throw_if($publishDirectory === false, RuntimeException::class, 'Publish directory not found.');
+
+        // A fresh host panel gains the plugin after its install-time asset copy.
+        // Register request-loaded assets here so publication does not depend on
+        // that panel having already been integrated in the current process.
+        FilamentAsset::register([
+            Js::make(
+                'rich-content-plugins/highlight',
+                $publishDirectory . '/build/js/filament/rich-content-plugins/highlight.js',
+            )->loadedOnRequest(),
+            AlpineComponent::make('capell-agent-admin', $publishDirectory . '/build/js/agent/admin-bridge.js'),
+            AlpineComponent::make('html-code-editor', $publishDirectory . '/build/js/components/html-code-editor.js'),
+            AlpineComponent::make('capell-keyboard-shortcuts', $publishDirectory . '/build/js/components/keyboard-shortcuts.js'),
+            AlpineComponent::make('capell-content-lock-heartbeat', $publishDirectory . '/build/js/components/content-lock-heartbeat.js'),
+        ], package: 'capell-admin');
+
         FilamentAsset::register([
             Css::make(
                 self::CSS_LAYER_ORDER_ASSET_ID,
@@ -903,8 +933,8 @@ class AdminServiceProvider extends AbstractPackageServiceProvider
         // assert on them — and each gained its own settings key so an operator
         // can switch individual counts back on without re-enabling all four.
         $stats = [
-            'pages' => ['label' => 'stat_total_pages', 'sort' => 10, 'value' => fn (): int => Page::query()->count()],
-            'sites' => ['label' => 'stat_sites', 'sort' => 20, 'value' => fn (): int => Site::query()->count()],
+            'pages' => ['label' => 'stat_total_pages', 'sort' => 10, 'value' => fn (): int => SiteAccess::current()->query(Page::class)->count()],
+            'sites' => ['label' => 'stat_sites', 'sort' => 20, 'value' => fn (): int => SiteAccess::current()->query(Site::class)->count()],
             'languages' => ['label' => 'stat_languages', 'sort' => 30, 'value' => fn (): int => Language::query()->count()],
             'page_types' => ['label' => 'stat_page_types', 'sort' => 40, 'value' => fn (): int => Blueprint::query()->pageType()->count()],
         ];
@@ -1022,6 +1052,10 @@ class AdminServiceProvider extends AbstractPackageServiceProvider
         Gate::policy(Layout::class, LayoutPolicy::class);
         Gate::policy(Media::class, MediaPolicy::class);
         Gate::policy(Site::class, SitePolicy::class);
+        Gate::policy(Blueprint::class, BlueprintPolicy::class);
+        Gate::policy(Language::class, LanguagePolicy::class);
+        Gate::policy(Theme::class, ThemePolicy::class);
+        Gate::policy(SiteDomain::class, SiteDomainPolicy::class);
 
         $userModel = config('auth.providers.users.model');
 

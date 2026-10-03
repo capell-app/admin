@@ -12,6 +12,8 @@ use Capell\Admin\Data\AdminZoneContextData;
 use Capell\Admin\Enums\AdminZone;
 use Capell\Admin\Enums\FilamentColorEnum;
 use Capell\Admin\Enums\ResourceEnum;
+use Capell\Admin\Filament\Actions\ForceDeleteBulkAction;
+use Capell\Admin\Filament\Actions\RestorePageBulkAction;
 use Capell\Admin\Filament\Actions\Table\ReplicatePageAction;
 use Capell\Admin\Filament\Components\Tables\Actions\EditAction;
 use Capell\Admin\Filament\Components\Tables\Actions\VisitUrlAction;
@@ -39,7 +41,6 @@ use Capell\Admin\Support\AdminZoneRegistry;
 use Capell\Admin\Support\DatabaseUrlExpression;
 use Capell\Admin\Support\Loader\SiteLoader;
 use Capell\Admin\Support\PageUrlPresenter;
-use Capell\Admin\Support\SiteScope;
 use Capell\Core\Actions\GetEditPageResourceUrlAction;
 use Capell\Core\Actions\PageDeletedAction;
 use Capell\Core\Data\Database\SqlFragment;
@@ -51,13 +52,12 @@ use Capell\Core\Models\Language;
 use Capell\Core\Models\Layout;
 use Capell\Core\Models\Page as PageModel;
 use Capell\Core\Models\Site;
+use Capell\Core\Support\Permissions\SiteAccess;
 use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
 use Filament\Actions\BulkAction;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\DeleteBulkAction;
-use Filament\Actions\ForceDeleteBulkAction;
-use Filament\Actions\RestoreBulkAction;
 use Filament\Forms\Components\Select;
 use Filament\Resources\Pages\ListRecords;
 use Filament\Resources\Pages\Page as ResourcePage;
@@ -161,9 +161,9 @@ class PagesTable implements TableConfigurator
                     ]))
                     ->before(self::beforeBulkDelete(...))
                     ->after(self::afterBulkDelete(...)),
-                RestoreBulkAction::make(),
+                RestorePageBulkAction::make(),
                 ForceDeleteBulkAction::make()
-                    ->after(self::afterRecordDeleted(...)),
+                    ->after(self::afterBulkDelete(...)),
             ])
             ->emptyStateHeading(__('capell-admin::generic.no_pages_found'))
             ->emptyStateDescription(__('capell-admin::generic.no_pages_description'))
@@ -361,7 +361,7 @@ class PagesTable implements TableConfigurator
     /**
      * @param  Collection<int, PageModel>  $records
      */
-    protected static function afterBulkDelete(DeleteBulkAction $action, Collection $records): void
+    protected static function afterBulkDelete(Collection $records): void
     {
         $records->each(self::afterRecordDeleted(...));
     }
@@ -377,7 +377,7 @@ class PagesTable implements TableConfigurator
      */
     protected static function applySiteFilterQuery(Builder $query): Builder
     {
-        return SiteScope::applyForCurrentActor($query, 'id')->ordered();
+        return SiteAccess::current()->scope($query, 'id')->ordered();
     }
 
     /**
@@ -655,7 +655,7 @@ class PagesTable implements TableConfigurator
             )
             ->with($relations)
             ->withCount([
-                'children',
+                'children' => fn (Builder $query): Builder => SiteAccess::current()->scope($query),
                 'pageUrls',
             ])
             ->tap(resolve(PageTableStatusResolver::class)->modifyQuery(...));

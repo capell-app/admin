@@ -30,6 +30,7 @@ use Filament\Forms\Components\DateTimePicker;
 use Filament\Notifications\Notification;
 use Filament\Schemas\Concerns\InteractsWithSchemas;
 use Filament\Schemas\Contracts\HasSchemas;
+use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Contracts\View\View;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Foundation\Auth\User as AuthenticatedUser;
@@ -37,6 +38,7 @@ use Illuminate\Support\Facades\Gate;
 use InvalidArgumentException;
 use Livewire\Attributes\Computed;
 use Livewire\Attributes\Locked;
+use Livewire\Attributes\On;
 use Livewire\Component;
 
 /**
@@ -71,6 +73,18 @@ final class PublishStatusPanel extends Component implements HasActions, HasSchem
     {
         $this->recordClass = $recordClass;
         $this->recordId = $recordId;
+    }
+
+    #[On('page-editor-saved')]
+    public function refreshAfterPageSaved(int $pageId): void
+    {
+        if (! is_a($this->recordClass, Page::class, true) || $pageId !== $this->recordId) {
+            $this->skipRender();
+
+            return;
+        }
+
+        $this->invalidateComputedState();
     }
 
     #[Computed]
@@ -301,11 +315,20 @@ final class PublishStatusPanel extends Component implements HasActions, HasSchem
         /** @var class-string<Model> $class */
         $class = $this->recordClass;
 
-        $record = $class::query()->findOrFail($this->recordId);
+        throw_unless(
+            is_a($class, Model::class, true)
+                && (is_a($class, Publishable::class, true) || is_a($class, Statusable::class, true)),
+            InvalidArgumentException::class,
+            sprintf('[%s] must be a publishable or statusable model.', $class),
+        );
 
-        if (! $record instanceof Publishable && ! $record instanceof Statusable) {
-            throw new InvalidArgumentException(sprintf('[%s] is neither publishable nor statusable.', $class));
-        }
+        $record = $class::query()->findOrFail($this->recordId);
+        $gate = Gate::forUser($this->actor());
+        $policy = $gate->getPolicyFor($record);
+
+        // A global Gate bypass or Filament's fallback can allow policy-less models.
+        throw_unless(is_object($policy) && is_callable([$policy, 'view']), AuthorizationException::class);
+        $gate->authorize('view', $record);
 
         return $record;
     }
@@ -354,6 +377,11 @@ final class PublishStatusPanel extends Component implements HasActions, HasSchem
         $this->afterChange($runner($record, $actor), $messageKey);
     }
 
+    private function invalidateComputedState(): void
+    {
+        unset($this->viewData, $this->readiness, $this->extensions);
+    }
+
     private function afterChange(
         PublicationTransitionResultData|PublishVisibilityActionResultData $result,
         string $messageKey,
@@ -366,7 +394,7 @@ final class PublishStatusPanel extends Component implements HasActions, HasSchem
             return;
         }
 
-        unset($this->viewData, $this->extensions);
+        $this->invalidateComputedState();
 
         Notification::make()
             ->title(__('capell-admin::message.' . $messageKey))

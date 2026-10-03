@@ -13,7 +13,6 @@ use Capell\Admin\Filament\Actions\HintEditAction;
 use Capell\Admin\Filament\Concerns\HasCustomSelectOption;
 use Capell\Admin\Filament\Resources\Pages\Schemas\PageForm;
 use Capell\Admin\Support\Search\AppliesNameSearchRelevance;
-use Capell\Admin\Support\SiteScope;
 use Capell\Core\Actions\GetEditPageResourceUrlAction;
 use Capell\Core\Contracts\Pageable;
 use Capell\Core\Enums\AssetEnum;
@@ -21,6 +20,7 @@ use Capell\Core\Enums\BlueprintGroupEnum;
 use Capell\Core\Facades\CapellCore;
 use Capell\Core\Models\Page;
 use Capell\Core\Models\Site;
+use Capell\Core\Support\Permissions\SiteAccess;
 use Closure;
 use Filament\Actions\Action;
 use Filament\Forms\Components\Select;
@@ -35,6 +35,7 @@ use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\HtmlString;
 use Illuminate\Support\Str;
+use Override;
 
 class PageSelect extends Select
 {
@@ -49,6 +50,7 @@ class PageSelect extends Select
 
     private ?Closure $modifySelectOptionsQueryUsing = null;
 
+    #[Override]
     protected function setUp(): void
     {
         parent::setUp();
@@ -69,9 +71,9 @@ class PageSelect extends Select
                     return null;
                 }
 
-                $page = SiteScope::applyForCurrentActor(Page::query())
+                $page = SiteAccess::current()->query(Page::class)
                     ->with(['pageUrls', 'ancestors'])
-                    ->withCount(['children', 'pageUrls'])
+                    ->withCount(['children' => fn (Builder $query): Builder => SiteAccess::current()->scope($query), 'pageUrls'])
                     ->whereKey($value)
                     ->first();
 
@@ -200,7 +202,7 @@ class PageSelect extends Select
                 return $record?->attributesToArray() ?? [];
             })
             ->getSelectedRecordUsing(
-                static fn (Select $component, ?int $state): ?Model => SiteScope::applyForCurrentActor(Page::query())->find($state),
+                static fn (Select $component, ?int $state): ?Model => SiteAccess::current()->query(Page::class)->find($state),
             );
     }
 
@@ -218,7 +220,7 @@ class PageSelect extends Select
                     $model = Page::class;
 
                     /** @var ?Page $page */
-                    $page = $model::query()->withWhereHas('blueprint:id,admin')->find($state);
+                    $page = SiteAccess::current()->query($model)->withWhereHas('blueprint:id,admin')->find($state);
 
                     if ($page === null) {
                         return null;
@@ -254,7 +256,7 @@ class PageSelect extends Select
         /** @var class-string<Page> $model */
         $model = Page::class;
 
-        $query = SiteScope::applyForCurrentActor($model::query())->select([
+        $query = SiteAccess::current()->query($model)->select([
             'pages.id',
             'pages.name',
             'pages.site_id',
@@ -310,7 +312,7 @@ class PageSelect extends Select
 
         $pages = $query
             ->with($relations)
-            ->withCount(['children', 'pageUrls'])
+            ->withCount(['children' => fn (Builder $query): Builder => SiteAccess::current()->scope($query), 'pageUrls'])
             ->orderBy('site_id')
             ->orderBy(NestedSet::LFT, 'asc')
             ->get();

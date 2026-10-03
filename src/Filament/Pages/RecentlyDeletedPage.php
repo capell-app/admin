@@ -6,13 +6,21 @@ namespace Capell\Admin\Filament\Pages;
 
 use BackedEnum;
 use BezhanSalleh\FilamentShield\Traits\HasPageShield;
+use Capell\Admin\Actions\RestorePageCascadeAction;
+use Capell\Admin\Filament\Actions\ForceDeleteAction;
+use Capell\Admin\Filament\Concerns\Validate\PageValidation;
+use Capell\Admin\Filament\Contracts\ValidatesDelete;
 use Capell\Core\Models\Media;
 use Capell\Core\Models\Page;
+use Capell\Core\Support\Permissions\SiteAccess;
+use Filament\Actions\Enums\ActionStatus;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page as FilamentPage;
+use Filament\Support\Exceptions\Halt;
 use Filament\Support\Icons\Heroicon;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\Gate;
 use Override;
 
 /**
@@ -23,9 +31,10 @@ use Override;
  * soft-delete sources); Layouts/Blueprints/Sites can be added by extending
  * the collectGroups() method without touching the view.
  */
-class RecentlyDeletedPage extends FilamentPage
+class RecentlyDeletedPage extends FilamentPage implements ValidatesDelete
 {
     use HasPageShield;
+    use PageValidation;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedTrash;
 
@@ -50,8 +59,8 @@ class RecentlyDeletedPage extends FilamentPage
     public function restoreRecord(string $resource, int $id): void
     {
         $model = match ($resource) {
-            'page' => Page::onlyTrashed()->find($id),
-            'media' => Media::onlyTrashed()->find($id),
+            'page' => SiteAccess::current()->query(Page::class)->onlyTrashed()->find($id),
+            'media' => SiteAccess::current()->query(Media::class)->onlyTrashed()->find($id),
             default => null,
         };
 
@@ -59,7 +68,27 @@ class RecentlyDeletedPage extends FilamentPage
             return;
         }
 
-        $model->restore();
+        $restored = $model instanceof Page
+            ? RestorePageCascadeAction::run($model)
+            : $model->getConnection()->transaction(function () use ($model): bool {
+                $locked = SiteAccess::current()->query($model::class)->onlyTrashed()->whereKey($model->getKey())->lockForUpdate()->first();
+                if ($locked === null) {
+                    return false;
+                }
+
+                Gate::authorize('restore', $locked);
+
+                return $locked->restore();
+            });
+
+        if (! $restored) {
+            Notification::make()
+                ->title(__('capell-admin::message.recently_deleted_restore_cascade_denied'))
+                ->warning()
+                ->send();
+
+            return;
+        }
 
         Notification::make()
             ->title(__('capell-admin::message.recently_deleted_restored'))
@@ -70,8 +99,8 @@ class RecentlyDeletedPage extends FilamentPage
     public function forceDeleteRecord(string $resource, int $id): void
     {
         $model = match ($resource) {
-            'page' => Page::onlyTrashed()->find($id),
-            'media' => Media::onlyTrashed()->find($id),
+            'page' => SiteAccess::current()->query(Page::class)->onlyTrashed()->find($id),
+            'media' => SiteAccess::current()->query(Media::class)->onlyTrashed()->find($id),
             default => null,
         };
 
@@ -79,12 +108,27 @@ class RecentlyDeletedPage extends FilamentPage
             return;
         }
 
-        $model->forceDelete();
+        $action = ForceDeleteAction::make()
+            ->record($model)
+            ->livewire($this)
+            ->successNotification(Notification::make()
+                ->title(__('capell-admin::message.recently_deleted_force_deleted'))
+                ->warning());
 
-        Notification::make()
-            ->title(__('capell-admin::message.recently_deleted_force_deleted'))
-            ->warning()
-            ->send();
+        try {
+            $action->callBefore();
+            $action->call();
+            $action->callAfter();
+        } catch (Halt) {
+            return;
+        }
+
+        if ($action->getStatus() === ActionStatus::Success) {
+            $action->sendSuccessNotification();
+        } else {
+            $action->sendFailureNotification();
+        }
+
     }
 
     /**
@@ -104,10 +148,10 @@ class RecentlyDeletedPage extends FilamentPage
     private function collectGroups(): array
     {
         /** @var Collection<int, Model> $deletedPages */
-        $deletedPages = new Collection(Page::onlyTrashed()->latest('deleted_at')->limit(50)->get()->all());
+        $deletedPages = new Collection(SiteAccess::current()->query(Page::class)->onlyTrashed()->latest('deleted_at')->limit(50)->get()->all());
 
         /** @var Collection<int, Model> $deletedMedia */
-        $deletedMedia = new Collection(Media::onlyTrashed()->latest('deleted_at')->limit(50)->get()->all());
+        $deletedMedia = new Collection(SiteAccess::current()->query(Media::class)->onlyTrashed()->latest('deleted_at')->limit(50)->get()->all());
 
         return [
             [
