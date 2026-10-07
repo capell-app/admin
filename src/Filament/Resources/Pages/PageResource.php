@@ -7,6 +7,7 @@ namespace Capell\Admin\Filament\Resources\Pages;
 use BackedEnum;
 use Capell\Admin\Actions\Pages\BuildPageRelationshipCountsAction;
 use Capell\Admin\Actions\Pages\ResolvePageAvailabilityStateAction;
+use Capell\Admin\Actions\ScopePageRestoreVisibilityAction;
 use Capell\Admin\Contracts\Extenders\PageResourcePageExtender;
 use Capell\Admin\Contracts\Extenders\PageResourceWidgetExtender;
 use Capell\Admin\Contracts\Extenders\PageTableExtender;
@@ -99,8 +100,13 @@ class PageResource extends SiteScopedResource implements ValidatesDelete
             ])
             ->whereHas('blueprint', static::applyBaseTypeAdminResourceConstraint(...));
 
-        return collect(app()->tagged(PageTableExtender::TAG))
-            ->reduce(fn (Builder $carry, PageTableExtender $extender): Builder => $extender->modifyQuery($carry), $query);
+        foreach (app()->tagged(PageTableExtender::TAG) as $extender) {
+            if ($extender instanceof PageTableExtender) {
+                $query = $extender->modifyQuery($query);
+            }
+        }
+
+        return ScopePageRestoreVisibilityAction::run($query);
     }
 
     public static function hasPageHierarchy(): bool

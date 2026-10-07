@@ -3,6 +3,15 @@
 declare(strict_types=1);
 
 return [
+    'extension_panel_topology_refresh' => 'Panel topology changes require a fresh application.',
+    'extension_panel_refresh_deferred' => 'Panel :panel remains unavailable; new surfaces are deferred until a fresh application.',
+    'extension_panel_middleware_removal' => 'Panel middleware removal requires a fresh application.',
+    'extension_panel_authentication_ambiguous' => 'Cannot identify authenticated panel routes; a fresh application is required.',
+    'extension_panel_authentication_excluded' => 'Excluded panel authentication or tenancy requires a fresh application.',
+    'extension_panel_coverage_incomplete' => 'Incomplete panel middleware coverage requires a fresh application.',
+    'extension_panel_security_excluded' => 'Excluded panel security middleware requires a fresh application.',
+
+    'extension_activation_pending' => 'The extension is installed, but activation needs a cache refresh and a fresh application. Reload retained workers before continuing.',
     'force_delete_dependencies_info' => 'Other records still use this item. Remove those records, including any in the trash, before permanently deleting it.',
     'site_force_delete_blocked' => 'This site still contains records.',
     'site_force_delete_blocked_info' => 'Permanently delete its pages, domains and layouts, including those in the trash, before permanently deleting the site.',
@@ -234,7 +243,10 @@ return [
     'widget_updated' => 'Widget updated successfully.',
     'snapshot_not_found' => 'That snapshot is no longer available.',
     'snapshot_restored' => 'Content restored from snapshot.',
-    'recently_deleted_restore_cascade_denied' => 'You cannot restore this page because you do not have permission to restore every related page. Nothing was restored.',
+    'recently_deleted_restore_cascade_denied' => 'This restore could not be completed safely. Access may have changed, or a listener may have cancelled restoration. Ask an administrator to review it. Nothing was restored.',
+    'restore_cascade_failed_selection' => 'The failed selections could not be restored safely because access changed or a listener cancelled restoration. Ask an administrator to review them.',
+    'page_restore_excluded_descendants' => 'These descendants were not restored: :pages. They were deleted separately, or their original deletion could not be linked to this page. Restore them separately from Recently Deleted.',
+    'page_restore_historical_notice' => 'For older deletions, only the selected page and its deleted parents can be recovered together. Descendants whose deletion cannot be linked to this page stay in trash; restore them separately. The restore message names the descendants left in trash that you can access.',
     'recently_deleted_restored' => 'Item restored.',
     'recently_deleted_force_deleted' => 'Item permanently deleted.',
 ];
