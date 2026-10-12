@@ -20,6 +20,19 @@ Use this guide when a package or app needs to register dashboard Filament widget
 
 Prefer overview stats for small package counters. Use a standalone dashboard Filament widget for tables, charts, calendars, health panels, setup panels, or anything with its own actions.
 
+## Dashboard Composition
+
+The main dashboard places `Trends` and `Insights` panels side by side, followed by
+`Pulse` metrics and `Activity`. Register a panel with
+`CapellAdmin::registerDashboardPanel(DashboardRegionEnum::Trends, YourWidget::class, DashboardEnum::Main)`
+to join that layout. Existing registrations without a region remain available in
+the collapsed Additional dashboard panels section.
+
+Visibility is evaluated before composition: empty regions are omitted and a lone
+lead panel fills the row. Configured Filament widgets retain their properties.
+The Reports menu reads the report registry and respects each page's access and
+navigation visibility checks; extensions do not need to add a separate menu link.
+
 ## Dashboard Buckets
 
 `DashboardEnum` controls where a widget can render:
@@ -43,17 +56,17 @@ enum DashboardEnum: string
 
 Each bucket maps to an admin surface:
 
-| Dashboard enum                   | Surface                                                  |
-| -------------------------------- | -------------------------------------------------------- |
-| `DashboardEnum::Main`            | Installed admin dashboard at `/admin`.                   |
-| `DashboardEnum::MarketingStudio` | Marketing Studio dashboard at `/admin/marketing-studio`. |
-| `DashboardEnum::Extensions`      | Extensions dashboard at `/admin/extensions`.             |
-| `DashboardEnum::SystemHealth`    | Reserved for system-health dashboard integrations.       |
-| `DashboardEnum::NotInstalled`    | Setup/empty state before Admin has an installed site.    |
+| Dashboard enum                   | Surface                                               |
+| -------------------------------- | ----------------------------------------------------- |
+| `DashboardEnum::Main`            | Installed admin dashboard at `/admin`.                |
+| `DashboardEnum::MarketingStudio` | Marketing widgets composed into the main Dashboard.   |
+| `DashboardEnum::Extensions`      | Extensions dashboard at `/admin/extensions`.          |
+| `DashboardEnum::SystemHealth`    | Reserved for system-health dashboard integrations.    |
+| `DashboardEnum::NotInstalled`    | Setup/empty state before Admin has an installed site. |
 
 The main dashboard page is `Capell\Admin\Filament\Pages\CapellDashboard`.
 
-Register against the most specific dashboard. Extension management widgets belong on `DashboardEnum::Extensions`; Marketing Studio widgets belong on `DashboardEnum::MarketingStudio`.
+Register against the most specific dashboard. Extension management widgets belong on `DashboardEnum::Extensions`; Marketing dashboard widgets belong on `DashboardEnum::MarketingStudio`.
 
 ## Built-In Widgets
 
@@ -75,7 +88,7 @@ The Admin service provider and Filament plugin register the default dashboard Fi
 
 Resource pages can have their own alert widgets, such as page, site, blueprint, language, and theme alerts. Those widgets live on the resource screens rather than the main dashboard.
 
-### Marketing Studio
+### Marketing dashboard contributions
 
 | Widget                                         | Purpose                                |
 | ---------------------------------------------- | -------------------------------------- |

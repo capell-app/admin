@@ -55,7 +55,7 @@ class BlueprintSelect extends SelectWithBelongsToRelation
     {
         parent::setUp();
 
-        $this->label(in_array($label, [null, '', '0'], true) ? __('capell-admin::form.type') : $label)
+        $this->label(in_array($label, [null, '', '0'], true) ? __('capell-admin::generic.blueprint') : $label)
             ->reactive()
             ->required()
             ->allowHtml()
@@ -129,7 +129,7 @@ class BlueprintSelect extends SelectWithBelongsToRelation
         return $this->getOptionLabelFromRecordUsing(
             fn (Blueprint $record): string => static::getSelectOption($record),
         )
-            ->createOptionForm(fn (Schema $schema): Schema => BlueprintForm::configure($schema))
+            ->createOptionForm(fn (Schema $schema): Schema => BlueprintForm::configure($schema->model(Blueprint::class)))
             ->createOptionAction(
                 fn (Action $action): Action => $action
                     ->fillForm(function (HasActions&HasSchemas $livewire, self $component): array {
@@ -187,7 +187,7 @@ class BlueprintSelect extends SelectWithBelongsToRelation
     public function withEditForm(): static
     {
         return $this->editOptionForm(fn (Schema $schema): Schema => BlueprintForm::configure(
-            $schema,
+            $schema->model($this->resolveSelectedBlueprintForEdit() ?? Blueprint::class),
             $this->embeddedSelectEditContext(),
         ))
             ->editOptionAction(

@@ -718,7 +718,7 @@ it('uses form actions below the edit form by default', function (): void {
         ->values()
         ->all();
 
-    expect($formActionNames)->toBe(['save', 'cancel'])
+    expect($formActionNames)->toBe(['save', 'saveAsDraft', 'cancel'])
         ->and($headerActionNames)->not->toContain('save')
         ->and($headerActionNames)->not->toContain('cancel');
 });
@@ -743,6 +743,7 @@ it('shows the frontend source map header action', function (): void {
     $frontendSourceMapAction = $actionGroup->getFlatActions()['frontendSourceMap'];
 
     expect($actionGroup)->not->toBeNull()
+        ->and($actionGroup->getLabel())->toBe(__('capell-admin::button.advanced'))
         ->and(collect($actionGroup->getFlatActions())->keys()->all())->toContain('frontendSourceMap')
         ->and($frontendSourceMapAction->getLabel())->toBe(__('capell-admin::generic.frontend_source_map'))
         ->and($frontendSourceMapAction->getTooltip())->toBe(__('capell-admin::generic.frontend_source_map_description'))
@@ -769,6 +770,7 @@ it('shows the frontend resource diagnostics header action', function (): void {
     $frontendResourceDiagnosticsAction = $actionGroup->getFlatActions()['frontendResourceDiagnostics'];
 
     expect($actionGroup)->not->toBeNull()
+        ->and($actionGroup->getLabel())->toBe(__('capell-admin::button.advanced'))
         ->and(collect($actionGroup->getFlatActions())->keys()->all())->toContain('frontendResourceDiagnostics')
         ->and($frontendResourceDiagnosticsAction->getLabel())->toBe(__('capell-admin::generic.frontend_resource_diagnostics'))
         ->and($frontendResourceDiagnosticsAction->getTooltip())->toBe(__('capell-admin::generic.frontend_resource_diagnostics_description'))
@@ -964,7 +966,7 @@ it('moves edit form actions above the form when configured', function (): void {
         ->all();
 
     expect($formActionNames)->toBe([])
-        ->and(array_slice($headerActionNames, 0, 2))->toBe(['save', 'cancel']);
+        ->and(array_slice($headerActionNames, 0, 3))->toBe(['save', 'saveAsDraft', 'cancel']);
 });
 
 it('can save', function (PageTypeEnum $pageTypeEnum): void {

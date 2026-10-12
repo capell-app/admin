@@ -3,6 +3,15 @@
 declare(strict_types=1);
 
 return [
+    'workspace_library' => 'Content Library',
+    'workspace_design' => 'Design',
+    'workspace_marketing' => 'Marketing',
+    'workspace_publishing' => 'Publishing',
+    'workspace_reports' => 'Reports',
+    'workspace_system' => 'System',
+    'workspace_health' => 'Health',
+    'section_navigation' => 'Section navigation',
+
     'activity_trail' => 'Activity Log',
     'block_templates' => 'Block Templates',
     'blueprints' => 'Blueprints',
@@ -25,7 +34,6 @@ return [
     'group_workflow' => 'Publishing',
     'languages' => 'Languages',
     'layouts' => 'Layouts',
-    'marketing_studio' => 'Marketing Studio',
     'media' => 'Media',
     'media_health' => 'Media Health',
     'navigations' => 'Navigations',
