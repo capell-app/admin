@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Capell\Admin\Filament\Configurators\Pages;
 
 use Capell\Admin\Contracts\ConfiguratorInterface;
+use Capell\Admin\Contracts\Configurators\ProvidesRelationManagers;
 use Capell\Admin\Contracts\ConfiguratorTypeEnumInterface;
 use Capell\Admin\Contracts\Extenders\PageSchemaExtender;
 use Capell\Admin\Enums\ConfiguratorTypeEnum;
@@ -32,6 +33,7 @@ use Capell\Core\Enums\BlueprintGroupEnum;
 use Capell\Core\Enums\PageTypeEnum;
 use Capell\Core\Models\Blueprint;
 use Capell\Core\Models\Page;
+use Filament\Forms\Components\Hidden;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Schemas\Components\Component;
@@ -44,9 +46,10 @@ use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
+use Override;
 use UnhandledMatchError;
 
-class DefaultPageConfigurator implements ConfiguratorInterface
+class DefaultPageConfigurator implements ConfiguratorInterface, ProvidesRelationManagers
 {
     use HasConfigurator;
     use HasDefaultRelationManagers {
@@ -58,6 +61,7 @@ class DefaultPageConfigurator implements ConfiguratorInterface
     protected bool $hasCreatePageSchema = true;
 
     /** @return array<int, mixed> */
+    #[Override]
     public static function relationManagers(Model $record): array
     {
         $relationManagers = $record instanceof Page ? static::baseRelationManagers($record) : [];
@@ -341,6 +345,8 @@ class DefaultPageConfigurator implements ConfiguratorInterface
             return TranslationsRepeater::make('translations')
                 ->columnSpanFull()
                 ->schema([
+                    // Focused system forms still need the selected language when inserting a translation.
+                    Hidden::make('language_id')->required(),
                     TextInput::make('title')
                         ->label(__('capell-admin::form.page_title'))
                         ->required()
@@ -357,6 +363,7 @@ class DefaultPageConfigurator implements ConfiguratorInterface
             $this->getContentEditor($schema),
             ...$this->resolveTranslationHookComponents($schema, PageTranslationSchemaHookEnum::AfterContentEditor),
             ExtraContentSection::make()
+                ->key('extra-content')
                 ->statePath('meta')
                 ->schema([
                     Textarea::make('summary')

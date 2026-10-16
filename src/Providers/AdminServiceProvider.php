@@ -58,6 +58,7 @@ use Capell\Admin\Enums\FilamentWidgetEnum;
 use Capell\Admin\Enums\PageEnum;
 use Capell\Admin\Enums\ResourceEnum;
 use Capell\Admin\Events\ServingAdmin;
+use Capell\Admin\Exceptions\PanelTopologyRefreshRequiredException;
 use Capell\Admin\Facades\CapellAdmin;
 use Capell\Admin\Filament\Imports\RedirectImporter;
 use Capell\Admin\Filament\Livewire\PageScratchDraftPanel;
@@ -87,6 +88,7 @@ use Capell\Admin\Filament\Widgets\Dashboard\AnalyticsTrendFilamentWidget;
 use Capell\Admin\Filament\Widgets\Dashboard\CapellAccountFilamentWidget;
 use Capell\Admin\Filament\Widgets\Dashboard\CapellInfoFilamentWidget;
 use Capell\Admin\Filament\Widgets\Dashboard\ListPagesFilamentWidget;
+use Capell\Admin\Filament\Widgets\Dashboard\NeedsAttentionFilamentWidget;
 use Capell\Admin\Filament\Widgets\Dashboard\RecentActivityFilamentWidget;
 use Capell\Admin\Filament\Widgets\Extensions\ExtensionActionsFilamentWidget;
 use Capell\Admin\Filament\Widgets\Extensions\ExtensionDependencyGraphFilamentWidget;
@@ -234,6 +236,8 @@ use Capell\Core\Models\SiteDomain;
 use Capell\Core\Models\Theme;
 use Capell\Core\Providers\CapellServiceProvider;
 use Capell\Core\Settings\CoreSettings;
+use Capell\Core\Support\Extensions\ExtensionContributionReceiptContext;
+use Capell\Core\Support\Extensions\ExtensionContributionReceiptRegistry;
 use Capell\Core\Support\Extensions\ExtensionOrderingAudit;
 use Capell\Core\Support\Extensions\ExtensionPosition;
 use Capell\Core\Support\Packages\AbstractPackageServiceProvider;
@@ -271,6 +275,7 @@ use Illuminate\Database\Query\Builder;
 use Illuminate\Routing\Events\RouteMatched;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\Log;
 use Livewire\Features\SupportTesting\Testable;
 use Livewire\Livewire;
 use Livewire\Mechanisms\DataStore;
@@ -340,6 +345,8 @@ class AdminServiceProvider extends AbstractPackageServiceProvider
 
         parent::registeringPackage();
 
+        $this->registerAdminEventSystem();
+
         $this->app->singleton(AgentAdminAuthorization::class);
         $this->app->singleton(AgentAdminConfirmationStore::class);
         $this->app->singleton(AgentAdminPropertyValuePresenter::class);
@@ -373,6 +380,12 @@ class AdminServiceProvider extends AbstractPackageServiceProvider
                 if ($panel->hasPlugin(CapellAdminPlugin::ID)) {
                     try {
                         resolve(CapellAdminPlugin::class)->synchronizePanelAdminSurface($panel);
+                    } catch (PanelTopologyRefreshRequiredException) {
+                        // The package activated correctly; only this process's panel is withheld.
+                        Log::warning(__('capell-admin::message.extension_panel_refresh_deferred', ['panel' => $panel->getId()]), [
+                            'package' => $event->package->name,
+                            'panel' => $panel->getId(),
+                        ]);
                     } catch (Throwable $throwable) {
                         // A new failure belongs to this activation; an earlier denial is deferred.
                         resolve(InstalledRuntimeLifecycle::class)->recordFailure($throwable, $event->package->name, self::class, 'admin', 'panel-refresh');
@@ -514,7 +527,15 @@ class AdminServiceProvider extends AbstractPackageServiceProvider
             fn (): AdminRuntimeActivator => new AdminRuntimeActivator(
                 $this->app->make(AdminBridgeRegistry::class),
                 function (): void {
-                    $this->prepareAdminRuntime();
+                    $receipts = $this->app->make(ExtensionContributionReceiptRegistry::class);
+                    $contexts = $receipts->providerContexts(self::class);
+                    // Direct provider registration may not retain manifest receipt contexts.
+                    $contexts = $contexts !== [] ? $contexts : [
+                        ExtensionContributionReceiptContext::foundation(self::$packageName, 'admin', self::class),
+                    ];
+                    $receipts->withContexts($contexts, function (): void {
+                        $this->prepareAdminRuntime();
+                    });
                 },
                 function (): void {
                     $this->activateAdminRuntime();
@@ -571,7 +592,6 @@ class AdminServiceProvider extends AbstractPackageServiceProvider
             ->registerPublishCommands()
             ->registerSubscribers()
             ->registerModelInterceptors()
-            ->registerAdminEventSystem()
             ->registerPageUrlRewritePrompt()
             ->registerActAsOwnerAuditing()
             ->registerEventSourcingBridges()
@@ -925,6 +945,7 @@ class AdminServiceProvider extends AbstractPackageServiceProvider
                 AnalyticsRecentActivityFilamentWidget::class,
                 CapellAccountFilamentWidget::class,
                 CapellInfoFilamentWidget::class,
+                NeedsAttentionFilamentWidget::class,
                 ListPagesFilamentWidget::class,
                 RecentActivityFilamentWidget::class,
             ],
@@ -958,6 +979,7 @@ class AdminServiceProvider extends AbstractPackageServiceProvider
         CapellAdmin::registerDashboardPanel(DashboardRegionEnum::Trends, AnalyticsTrendFilamentWidget::class, DashboardEnum::Main);
         CapellAdmin::registerDashboardPanel(DashboardRegionEnum::Insights, AnalyticsInsightsFilamentWidget::class, DashboardEnum::Main);
         CapellAdmin::registerDashboardPanel(DashboardRegionEnum::Activity, AnalyticsRecentActivityFilamentWidget::class, DashboardEnum::Main);
+        CapellAdmin::registerDashboardPanel(DashboardRegionEnum::Activity, RecentActivityFilamentWidget::class, DashboardEnum::Main);
 
         return $this;
     }
@@ -1106,9 +1128,9 @@ class AdminServiceProvider extends AbstractPackageServiceProvider
 
     private function registerAdminEventSystem(): self
     {
-        $this->app->singleton(AdminEventRegistry::class);
+        $this->app->singletonIf(AdminEventRegistry::class);
 
-        $this->app->singleton(AdminEventRouter::class);
+        $this->app->singletonIf(AdminEventRouter::class);
 
         return $this;
     }
