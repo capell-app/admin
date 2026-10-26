@@ -3,6 +3,8 @@
 declare(strict_types=1);
 
 return [
+    'page_site_unsupported_languages' => 'Resolve the unsupported language content before saving: switch back to a compatible site or confirm Use site languages.',
+    'page_site_choices_cleared' => 'Review page choices after changing site',
     'extension_panel_topology_refresh' => 'Panel topology changes require a fresh application.',
     'extension_panel_refresh_deferred' => 'Panel :panel remains unavailable; new surfaces are deferred until a fresh application.',
     'extension_panel_middleware_removal' => 'Panel middleware removal requires a fresh application.',
@@ -104,7 +106,7 @@ return [
     'layout_not_deletable' => 'This layout cannot be deleted.',
     'layout_not_deletable_info' => 'It is still used by one or more pages.',
     'layout_saved' => 'Layout saved successfully.',
-    'settings_saved' => 'Settings saved successfully.',
+    'settings_saved' => 'Settings saved',
     'layout_unsaved' => 'You have unsaved layout changes.',
     'content_inventory_empty' => 'No editable content has been attached to this layout yet.',
     'content_inventory_empty_hint' => 'Open advanced layout to add widgets or attach content.',

@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 return [
     'title' => 'Theme Library',
-    'subheading' => 'Customize, preview, and apply installed themes from one workflow.',
+    'subheading' => 'Customise, preview, and apply installed themes from one workflow.',
     'sections' => [
         'installed' => 'Installed themes',
         'available' => 'Available themes',
@@ -51,6 +51,7 @@ return [
         'preset_count' => ':count preset|:count presets',
     ],
     'actions' => [
+        'create_preview_page' => 'Create a page for this site',
         'apply' => 'Apply theme',
         'add_theme' => 'New theme',
         'apply_theme' => 'Apply :theme',
@@ -59,7 +60,7 @@ return [
         'create_available' => 'Create theme',
         'create_available_named' => 'Create :theme theme',
         'creating_available' => 'Creating...',
-        'customize' => 'Customize',
+        'customize' => 'Customise',
         'diagnostics_for_theme' => ':theme diagnostics',
         'hide_details' => 'Hide details',
         'install_theme' => 'Add installed package',
@@ -71,9 +72,12 @@ return [
         'validate' => 'Validate themes',
     ],
     'help' => [
+        'preview_site_unavailable' => 'Choose a site you can access.',
+        'preview_page_unavailable' => 'This page is no longer available. Choose an accessible page from the selected site.',
+        'preview_empty_site' => 'This site has no accessible pages to preview. Create a page in Pages if permitted, or select another site.',
         'activation_scope' => 'Global changes the default theme for sites without an override. Selected sites changes only the chosen site records.',
         'apply' => 'Choose where this theme should be used. Applying a theme refreshes affected frontend cache keys.',
-        'available_theme' => 'Create or complete the installed theme record before customizing, previewing, or applying this package definition.',
+        'available_theme' => 'Create or complete the installed theme record before customising, previewing, or applying this package definition.',
         'marketplace' => 'Use the Marketplace button above to browse and install marketplace themes.',
         'preview' => 'Choose the exact site, page, and preset to preview before applying this theme.',
         'preset' => 'Choose a saved preset, then preview a site/page before applying the theme.',

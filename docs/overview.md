@@ -15,6 +15,18 @@ Admin extends these Capell surfaces:
 - Admin header tools, user menu items, dashboard Filament widgets, resource actions, schema hooks, settings schemas, and report pages.
 - Admin-facing package settings through the settings schema registry.
 
+## Recovery and setup controls
+
+Recently Deleted searches and pages through permitted deleted Pages and Media. Counts exclude inaccessible records. Resource links open the existing deleted-only filter; restore and permanent-delete policies still apply.
+
+Settings preserve saved dashboard visibility, including an intentionally empty main dashboard. **Restore recommended main dashboard layout** resets the main layout in the form; Save applies it without resetting Extensions. Explicit install/setup repair remains available for legacy configuration.
+
+The default image source must belong to the allowed image-source preset. Older inconsistent configuration still falls back to an allowed source at runtime, and individual fields can impose narrower restrictions.
+
+The stored Core `default_locale` property remains available for host integrations. Foundation admin language follows the enabled user preference, falling back to `app.locale`; public language follows the resolved site and route. The language setup section links to authorised user and site settings without changing that precedence. Host applications must document any additional consumers of `default_locale`.
+
+Site Health marks unused optimiser tool/profile prerequisites **Not configured**. Optimiser capability registration, pipeline configuration, generated artefacts and outstanding database queue work keep active readiness checks applicable. Failed and in-flight critical-CSS diagnostics remain visible independently. Tools must be available to the worker running generation; a web-host check does not prove worker readiness. Normal stylesheet delivery remains available.
+
 ## Why It Matters
 
 - **For developers:** Admin is the package boundary for Filament resources, schema extension, policies, settings pages, dashboard Filament widgets, and admin events. Packages extend Admin through documented registries instead of editing core resources.
@@ -48,7 +60,9 @@ The bulk confirmation proves that reverting hides selected pages from visitors w
 
 ### Page history and layout choices
 
-The history timeline shows saved changes before an editor opens the rollback preview. The layout selector identifies disabled and unused layouts before selection.
+The history timeline shows saved changes before an editor opens the rollback preview. The layout selector identifies disabled and unused layouts before selection. In a layout editor, wrapper and body views are searchable choices from their separate `LayoutViewRegistry` registrations. Leave either choice blank to use the default. An unavailable saved view must be cleared, replaced or registered again before saving.
+
+Bulk moves offer parents eligible for at least one selected page. Mixed-site selections can move only the pages belonging to the chosen parent's site. The result names viewable moved and skipped pages, including recursive or permission-related skips; the server rechecks eligibility when the action runs.
 
 | Surface               | Light                                                                           | Dark                                                                                              |
 | --------------------- | ------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
@@ -57,6 +71,10 @@ The history timeline shows saved changes before an editor opens the rollback pre
 | Layout selector       | [Layout choices](images/screenshots/admin-page-layout-select-record-states.png) | [Layout choices in dark mode](images/screenshots/admin-page-layout-select-record-states-dark.png) |
 
 ### Media workflow
+
+Health filters match every applicable issue, so an image missing both alt text and credit appears in both filters. The primary badge still shows one issue; its tooltip lists them all. Healthy contains only records without issues.
+
+Use **Open file or video** or **Copy public link** to obtain a generated URL for a publicly stored file, or the canonical source of an external video. **Copy file name** remains separate. Private files show that a public link is unavailable and retain their authorised delivery method.
 
 | Replace an upload                                                                                                                                    | Set a focal point                                                                                                                           |
 | ---------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -100,7 +118,7 @@ Admin connects to Core records and package records through Filament resources:
 
 Migration impact:
 
-- Admin has settings migrations only.
+- Admin has settings migrations and an upload ownership registry schema migration.
 - Core creates shared tables used by Admin, including admin notification subscriptions.
 
 Deletion and retention:

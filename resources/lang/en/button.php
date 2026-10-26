@@ -3,6 +3,10 @@
 declare(strict_types=1);
 
 return [
+    'use_site_languages' => 'Use site languages',
+    'edit_user' => 'Edit user',
+    'edit_role_permissions' => 'Edit role permissions',
+
     'add_action' => 'Add Action',
     'act_as_owner' => 'Act as owner',
     'add_asset' => 'Add Asset',
@@ -63,7 +67,7 @@ return [
     'create_site' => 'Create site',
     'create_widget' => 'Create Widget',
     'create_layout_element_asset' => 'Create Layout Element Asset',
-    'customise_dashboard' => 'Customize',
+    'customise_dashboard' => 'Customise',
     'delete' => 'Delete',
     'delete_installer' => 'Delete Installer',
     'disable_extension' => 'Disable extension',
@@ -149,6 +153,9 @@ return [
     'revisions' => 'Revisions',
     'review_upgrades' => 'Review upgrades',
     'run_safe_update' => 'Run safe update',
+    'settings' => [
+        'save' => 'Save settings',
+    ],
     'save' => 'Save',
     'save_and_publish' => 'Save and Publish',
     'save_as_draft' => 'Save as draft',
@@ -164,7 +171,7 @@ return [
     'select_widget' => 'Select :widget',
     'set_active_theme' => 'Set active theme',
     'show_layout_element_assets' => 'Show assets',
-    'site_health_tooltip' => 'Open diagnostics for cache, static output, frontend optimization, and server readiness.',
+    'site_health_tooltip' => 'Open diagnostics for cache, static output, frontend optimisation, and server readiness.',
     'site_tools' => 'Tools',
     'sitemap' => 'Sitemap',
     'tablet' => 'Tablet',

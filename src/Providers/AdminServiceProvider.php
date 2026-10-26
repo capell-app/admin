@@ -4,7 +4,10 @@ declare(strict_types=1);
 
 namespace Capell\Admin\Providers;
 
+use BezhanSalleh\FilamentShield\Support\Utils as ShieldUtils;
 use Capell\Admin\Actions\CreateDefaultPagesAction;
+use Capell\Admin\Actions\Media\StoreAdminUploadedFilesAction;
+use Capell\Admin\Actions\Media\ValidateAdminUploadStateAction;
 use Capell\Admin\Actions\Notifications\ResolveDefaultPackageOperationRecipientsAction;
 use Capell\Admin\Console\Commands\CacheConfiguratorsCommand;
 use Capell\Admin\Console\Commands\CacheWidgetsCommand;
@@ -12,6 +15,7 @@ use Capell\Admin\Console\Commands\ClearCacheCommand;
 use Capell\Admin\Console\Commands\ClearConfiguratorsCacheCommand;
 use Capell\Admin\Console\Commands\ClearWidgetsCacheCommand;
 use Capell\Admin\Console\Commands\InstallCommand;
+use Capell\Admin\Console\Commands\PruneAdminUploadGrantsCommand;
 use Capell\Admin\Console\Commands\PublishResourcesCommand;
 use Capell\Admin\Console\Commands\RepairComposerDriftCommand;
 use Capell\Admin\Console\Commands\SendUpgradeSummaryNotificationCommand;
@@ -60,6 +64,8 @@ use Capell\Admin\Enums\ResourceEnum;
 use Capell\Admin\Events\ServingAdmin;
 use Capell\Admin\Exceptions\PanelTopologyRefreshRequiredException;
 use Capell\Admin\Facades\CapellAdmin;
+use Capell\Admin\Filament\Components\Forms\FileUpload as AdminFileUpload;
+use Capell\Admin\Filament\Components\Forms\SpatieMediaLibraryFileUpload as AdminSpatieMediaLibraryFileUpload;
 use Capell\Admin\Filament\Imports\RedirectImporter;
 use Capell\Admin\Filament\Livewire\PageScratchDraftPanel;
 use Capell\Admin\Filament\Livewire\PublishStatusPanel;
@@ -105,6 +111,7 @@ use Capell\Admin\Filament\Widgets\MarketingStudio\MarketingStudioQuickActionsFil
 use Capell\Admin\Filament\Widgets\MarketingStudio\MarketingStudioTimelineFilamentWidget;
 use Capell\Admin\Filament\Widgets\MarketingStudio\MarketingStudioWorkQueueFilamentWidget;
 use Capell\Admin\Http\Middleware\EnsureInstalledPanelAvailable;
+use Capell\Admin\Listeners\AdminUploadGrantTransactionListener;
 use Capell\Admin\Listeners\RememberPageUrlRewriteForPrompt;
 use Capell\Admin\Livewire\Header\AdminTools;
 use Capell\Admin\Livewire\Header\AdminWorkspaceSwitcher;
@@ -124,12 +131,15 @@ use Capell\Admin\Macros\Filament\TestableMacro;
 use Capell\Admin\Macros\Filament\TextInputMacro;
 use Capell\Admin\Observers\LayoutObserver as AdminLayoutObserver;
 use Capell\Admin\Observers\PageObserver as AdminPageObserver;
+use Capell\Admin\Policies\ActivityPolicy;
+use Capell\Admin\Policies\BlockTemplatePolicy;
 use Capell\Admin\Policies\BlueprintPolicy;
 use Capell\Admin\Policies\LanguagePolicy;
 use Capell\Admin\Policies\LayoutPolicy;
 use Capell\Admin\Policies\MediaPolicy;
 use Capell\Admin\Policies\PagePolicy;
 use Capell\Admin\Policies\RedirectPolicy;
+use Capell\Admin\Policies\RolePolicy;
 use Capell\Admin\Policies\SiteDomainPolicy;
 use Capell\Admin\Policies\SitePolicy;
 use Capell\Admin\Policies\ThemePolicy;
@@ -191,6 +201,8 @@ use Capell\Admin\Support\Makers\AdminBladeComponentMaker;
 use Capell\Admin\Support\Makers\AdminConfiguratorMaker;
 use Capell\Admin\Support\Makers\FilamentWidgetMaker;
 use Capell\Admin\Support\MarketingStudio\MarketingStudioActionRegistry;
+use Capell\Admin\Support\Media\AdminUploadDeletion;
+use Capell\Admin\Support\Media\AdminUploadGrantRepository;
 use Capell\Admin\Support\Media\LegacyAwareAdminMediaFieldFactory;
 use Capell\Admin\Support\Media\MediaDuplicateIndex;
 use Capell\Admin\Support\Navigation\AdminNavigationBadgeCountCache;
@@ -225,6 +237,7 @@ use Capell\Core\Enums\PageTypeEnum;
 use Capell\Core\Events\InstalledRuntimeRefreshed;
 use Capell\Core\Events\PageUrlsRewritten;
 use Capell\Core\Facades\CapellCore;
+use Capell\Core\Models\BlockTemplate;
 use Capell\Core\Models\Blueprint;
 use Capell\Core\Models\Language;
 use Capell\Core\Models\Layout;
@@ -251,10 +264,13 @@ use CmsMulti\FilamentClearCache\Facades\FilamentClearCache;
 use Filament\Actions\Action;
 use Filament\Actions\ImportAction;
 use Filament\Facades\Filament;
+use Filament\Forms\Components\BaseFileUpload;
 use Filament\Forms\Components\ColorPicker;
 use Filament\Forms\Components\Field;
+use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\Repeater;
 use Filament\Forms\Components\Select;
+use Filament\Forms\Components\SpatieMediaLibraryFileUpload;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Schemas\Components\Component;
@@ -269,8 +285,12 @@ use Filament\Tables\Columns\Column;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Contracts\Auth\Authenticatable;
 use Illuminate\Contracts\Events\Dispatcher;
+use Illuminate\Database\Eloquent\Attributes\UsePolicy;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Events\TransactionBeginning;
+use Illuminate\Database\Events\TransactionCommitted;
+use Illuminate\Database\Events\TransactionRolledBack;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Routing\Events\RouteMatched;
 use Illuminate\Support\Facades\Event;
@@ -280,7 +300,9 @@ use Livewire\Features\SupportTesting\Testable;
 use Livewire\Livewire;
 use Livewire\Mechanisms\DataStore;
 use Override;
+use ReflectionClass;
 use RuntimeException;
+use Spatie\Activitylog\Models\Activity;
 use Spatie\LaravelPackageTools\Package;
 use Throwable;
 
@@ -305,6 +327,7 @@ class AdminServiceProvider extends AbstractPackageServiceProvider
                 ClearConfiguratorsCacheCommand::class,
                 InstallCommand::class,
                 PublishResourcesCommand::class,
+                PruneAdminUploadGrantsCommand::class,
                 RepairComposerDriftCommand::class,
                 SendUpgradeSummaryNotificationCommand::class,
                 SetupCommand::class,
@@ -314,6 +337,7 @@ class AdminServiceProvider extends AbstractPackageServiceProvider
             ])
             ->hasConfigFile(['capell-admin'])
             ->hasTranslations()
+            ->hasMigrations(CapellAdmin::getMigrations())
             ->hasRoute('web');
 
         $this->optimizes(
@@ -345,7 +369,21 @@ class AdminServiceProvider extends AbstractPackageServiceProvider
 
         parent::registeringPackage();
 
+        // Native make() and legacy factories use the container too. The native
+        // original-path fallback reads model attributes before its allow callback,
+        // which fails for virtual/nested fields. Share our persisted-data resolver.
+        $this->app->bindIf(FileUpload::class, AdminFileUpload::class);
+        $this->app->bindIf(SpatieMediaLibraryFileUpload::class, AdminSpatieMediaLibraryFileUpload::class);
+
         $this->registerAdminEventSystem();
+
+        $this->app->scoped(AdminUploadGrantRepository::class);
+        $this->app->scoped(AdminUploadDeletion::class);
+
+        $events = $this->app->make(Dispatcher::class);
+        $events->listen(TransactionBeginning::class, [AdminUploadGrantTransactionListener::class, 'beginning']);
+        $events->listen(TransactionCommitted::class, [AdminUploadGrantTransactionListener::class, 'committed']);
+        $events->listen(TransactionRolledBack::class, [AdminUploadGrantTransactionListener::class, 'rolledBack']);
 
         $this->app->singleton(AgentAdminAuthorization::class);
         $this->app->singleton(AgentAdminConfirmationStore::class);
@@ -548,8 +586,48 @@ class AdminServiceProvider extends AbstractPackageServiceProvider
     }
 
     #[Override]
+    protected function bootPackageMigrations(): self
+    {
+        // Keep the same ledger/rollback identity as Capell's package publisher.
+        // Spatie's default publisher replaces even an existing timestamp.
+        foreach (CapellAdmin::getMigrations() as $migration) {
+            $this->publishes([
+                __DIR__ . '/../../database/migrations/' . $migration . '.php' => database_path('migrations/' . $migration . '.php'),
+            ], 'capell-admin-migrations');
+        }
+
+        return $this;
+    }
+
+    #[Override]
     protected function bootPackage(): self
     {
+        BaseFileUpload::configureUsing(
+            static function (BaseFileUpload $upload): void {
+                if (! $upload instanceof SpatieMediaLibraryFileUpload) {
+                    $upload->beforeStateDehydrated(static function (BaseFileUpload $component): void {
+                        StoreAdminUploadedFilesAction::run($component);
+                    }, shouldUpdateValidatedStateAfter: true);
+                }
+
+                if (! $upload instanceof AdminFileUpload && ! $upload instanceof AdminSpatieMediaLibraryFileUpload) {
+                    // Keep native subclass methods intact. The native guard's
+                    // condition runs before validation, previews and removal;
+                    // authorise there before bypassing its top-level-only lookup.
+                    $upload->preventFilePathTampering(static function (BaseFileUpload $component): bool {
+                        ValidateAdminUploadStateAction::run($component);
+
+                        return false;
+                    });
+
+                    return;
+                }
+
+                $upload->preventFilePathTampering();
+            },
+            isImportant: true,
+        );
+
         $publishDirectory = realpath(__DIR__ . '/../../publishes');
 
         throw_if($publishDirectory === false, RuntimeException::class, 'Publish directory not found.');
@@ -564,6 +642,7 @@ class AdminServiceProvider extends AbstractPackageServiceProvider
             )->loadedOnRequest(),
             AlpineComponent::make('capell-agent-admin', $publishDirectory . '/build/js/agent/admin-bridge.js'),
             AlpineComponent::make('html-code-editor', $publishDirectory . '/build/js/components/html-code-editor.js'),
+            AlpineComponent::make('capell-repeater-tabs', $publishDirectory . '/build/js/components/repeater-tabs.js'),
             AlpineComponent::make('capell-keyboard-shortcuts', $publishDirectory . '/build/js/components/keyboard-shortcuts.js'),
             AlpineComponent::make('capell-content-lock-heartbeat', $publishDirectory . '/build/js/components/content-lock-heartbeat.js'),
         ], package: 'capell-admin');
@@ -1107,20 +1186,45 @@ class AdminServiceProvider extends AbstractPackageServiceProvider
         // them. Register explicitly so that Gate::inspect/allows/denies
         // invoked outside Filament's resource-scoped policy lookup (e.g.
         // from Actions, CLI, queued jobs) still resolves the right policy.
-        Gate::policy(Page::class, PagePolicy::class);
-        Gate::policy(PageUrl::class, RedirectPolicy::class);
-        Gate::policy(Layout::class, LayoutPolicy::class);
-        Gate::policy(Media::class, MediaPolicy::class);
-        Gate::policy(Site::class, SitePolicy::class);
-        Gate::policy(Blueprint::class, BlueprintPolicy::class);
-        Gate::policy(Language::class, LanguagePolicy::class);
-        Gate::policy(Theme::class, ThemePolicy::class);
-        Gate::policy(SiteDomain::class, SiteDomainPolicy::class);
+        $policies = [
+            Activity::class => ActivityPolicy::class,
+            BlockTemplate::class => BlockTemplatePolicy::class,
+            ShieldUtils::getRoleModel() => RolePolicy::class,
+            Page::class => PagePolicy::class,
+            PageUrl::class => RedirectPolicy::class,
+            Layout::class => LayoutPolicy::class,
+            Media::class => MediaPolicy::class,
+            Site::class => SitePolicy::class,
+            Blueprint::class => BlueprintPolicy::class,
+            Language::class => LanguagePolicy::class,
+            Theme::class => ThemePolicy::class,
+            SiteDomain::class => SiteDomainPolicy::class,
+        ];
 
         $userModel = config('auth.providers.users.model');
 
         if (is_string($userModel) && is_a($userModel, Model::class, true)) {
-            Gate::policy($userModel, UserPolicy::class);
+            $policies[$userModel] = UserPolicy::class;
+        }
+
+        foreach ($policies as $model => $policy) {
+            // Auto-discovery is not an explicit host choice. Preserve explicit
+            // registrations for this model and its ancestors.
+            $hasExplicitPolicy = array_any(
+                array_keys(Gate::policies()),
+                static fn (string $registeredModel): bool => is_a($model, $registeredModel, true),
+            );
+
+            if (class_exists($model)) {
+                $reflection = new ReflectionClass($model);
+                do {
+                    $hasExplicitPolicy = $hasExplicitPolicy || $reflection->getAttributes(UsePolicy::class) !== [];
+                } while ($reflection = $reflection->getParentClass());
+            }
+
+            if (! $hasExplicitPolicy) {
+                Gate::policy($model, $policy);
+            }
         }
 
         return $this;
@@ -1291,6 +1395,11 @@ class AdminServiceProvider extends AbstractPackageServiceProvider
     private function registerContentRetentionSchedule(): self
     {
         $this->registerSchedule(function (Schedule $schedule): void {
+            $schedule->command('capell:admin-prune-upload-grants')
+                ->hourly()
+                ->withoutOverlapping()
+                ->onOneServer();
+
             $schedule->command('capell:purge-soft-deleted-media')
                 ->dailyAt('03:00')
                 ->withoutOverlapping()

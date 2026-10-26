@@ -56,6 +56,10 @@ class ExtensionsPage extends Dashboard implements ExtensionTableDataSource, HasA
 
     public const string MANAGE_PERMISSION = 'Manage:ExtensionsPage';
 
+    /** @var array<string, mixed>|null */
+    #[Url(as: 'installed-extensionsFilters')]
+    public ?array $tableFilters = null;
+
     #[Url]
     public ?string $manage = null;
 
@@ -219,7 +223,8 @@ class ExtensionsPage extends Dashboard implements ExtensionTableDataSource, HasA
             ->icon(Heroicon::OutlinedCog6Tooth)
             ->slideOver()
             ->modalWidth(Width::ScreenLarge)
-            ->modalCancelActionLabel(__('capell-admin::button.close'))
+            ->modalSubmitActionLabel(__('capell-admin::button.settings.save'))
+            ->modalCancelActionLabel(__('capell-admin::button.cancel'))
             ->modalHeading(fn (Action $action): string => $this->managementHeading($action))
             ->schema(fn (Schema $schema, Action $action): array => $this->managementSchema($schema, $action))
             ->fillForm(fn (Action $action): array => $this->managementFormData($action))

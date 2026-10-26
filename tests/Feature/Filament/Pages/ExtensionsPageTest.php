@@ -29,10 +29,15 @@ use Capell\Admin\Tests\Fixtures\Autoload\AbstractPackageSettingsPageTestSettings
 use Capell\Admin\Tests\Fixtures\Autoload\TestDashboardFilamentWidgetForRegistrar;
 use Capell\Admin\Tests\Fixtures\Extensions\FakeExtensionCatalogueMetadataProvider;
 use Capell\Core\Actions\DisablePackageAction;
+use Capell\Core\Actions\EnablePackageAction;
+use Capell\Core\Actions\Scaffolding\ScaffoldPackageAction;
+use Capell\Core\Contracts\SettingsContract;
+use Capell\Core\Data\Scaffolding\PackageScaffoldInputData;
 use Capell\Core\Enums\ExtensionHealthAlertCategory;
 use Capell\Core\Enums\ExtensionHealthAlertSeverity;
 use Capell\Core\Enums\ExtensionProviderRecoveryStateEnum;
 use Capell\Core\Enums\ExtensionStatusEnum;
+use Capell\Core\Enums\PackageScaffoldProfile;
 use Capell\Core\Facades\CapellCore;
 use Capell\Core\Models\CapellExtension;
 use Capell\Core\Models\ExtensionHealthAlert;
@@ -42,6 +47,7 @@ use Capell\Core\Support\Manifest\CapellManifestData;
 use Capell\Core\Support\Marketplace\MarketplaceAssetUrl;
 use Capell\Core\Support\PackageRegistry\CapellPackageRegistry;
 use Capell\Core\Support\Packages\InstalledRuntimeLifecycle;
+use Capell\Core\Support\Packages\PackageSurfaceRegistrar;
 use Capell\Core\Support\Process\ProcessFactoryInterface;
 use Capell\Core\Support\Settings\SettingsGroupMetadata;
 use Capell\Core\Support\Settings\SettingsSchemaRegistry;
@@ -55,10 +61,12 @@ use Filament\Tables\Columns\Column;
 use Illuminate\Filesystem\Filesystem;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\HtmlString;
+use Illuminate\Support\ServiceProvider;
 use Livewire\Livewire;
 
 use function Pest\Laravel\get;
 
+use Spatie\LaravelSettings\Settings;
 use Spatie\Permission\Models\Permission;
 use Symfony\Component\Process\Process;
 
@@ -362,7 +370,7 @@ it('renders extension dashboard Filament widgets as header widgets above the ins
 
     $settings = AdminSettings::instance();
     $settings->enabled_widgets = [
-        'extensions.stats' => false,
+        'extensions.stats' => true,
         'extensions.installed' => true,
     ];
     $settings->widget_order = [
@@ -384,6 +392,19 @@ it('renders extension dashboard Filament widgets as header widgets above the ins
         ->and($widgetNames)->not->toContain(Livewire::new(InstalledExtensionsFilamentWidget::class)->getName())
         ->and(AdminSettings::instance()->refresh()->enabled_widgets)
         ->toHaveKey('extensions.stats', true);
+});
+
+it('preserves a disabled extension statistics widget when rendering the dashboard', function (): void {
+    grantExtensionsPageAccess();
+    $settings = AdminSettings::instance();
+    $settings->enabled_widgets = array_replace($settings->enabled_widgets, ['extensions.stats' => false]);
+    $settings->save();
+
+    $editor = Livewire::test(ExtensionsPage::class)->assertSuccessful();
+    $widgetName = Livewire::new(ExtensionStatsOverviewFilamentWidget::class)->getName();
+
+    expect(domElements(domXPath($editor->html()), '//*[@*[name()="wire:name"] = "' . $widgetName . '"]'))->toBe([])
+        ->and(AdminSettings::instance()->refresh()->enabled_widgets)->toHaveKey('extensions.stats', false);
 });
 
 it('renders extension stats with two default, three medium and five large columns', function (): void {
@@ -789,7 +810,7 @@ it('renders manifest metadata for installed extension packages', function (): vo
     mkdir($packagePath . '/docs/assets/marketplace', recursive: true);
     file_put_contents(
         $packagePath . '/docs/assets/marketplace/extension-card.png',
-        base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=', strict: true),
+        base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', strict: true),
     );
 
     $manifest = CapellManifestData::fromArray(capellManifestV3Array(
@@ -1623,13 +1644,21 @@ it('opens package settings as a native extension management modal', function ():
 
     Livewire::test(InstalledExtensionsFilamentWidget::class)
         ->assertSuccessful()
+        ->assertTableActionExists('manageExtension', fn (Action $action): bool => $action->getModalSubmitActionLabel() === __('capell-admin::button.settings.save')
+            && $action->getModalCancelActionLabel() === __('capell-admin::button.cancel'), record: 'vendor/settings-extension')
         ->assertTableActionVisible('manageExtension', record: 'vendor/settings-extension')
         ->assertTableActionHidden('openExtension', record: 'vendor/settings-extension')
         ->mountTableAction('manageExtension', 'vendor/settings-extension')
         ->assertMountedActionModalSee('Extension settings')
         ->assertSchemaStateSet([
             'headline' => 'Existing setting',
-        ]);
+        ])
+        ->fillForm(['headline' => 'Updated setting'])
+        ->callMountedAction()
+        ->assertHasNoActionErrors()
+        ->assertNotified(__('capell-admin::message.settings_saved'));
+
+    expect(AbstractPackageSettingsPageTestSettings::$savedValues['headline'] ?? null)->toBe('Updated setting');
 
     $extensionRecord = collect((new InstalledExtensionsFilamentWidget)->getExtensionsData())
         ->firstWhere('id', 'vendor/settings-extension');
@@ -1662,7 +1691,7 @@ it('opens package settings through URL query parameters', function (): void {
         settingsGroup: 'abstract-page-test',
     ));
 
-    Livewire::withQueryParams([
+    $component = Livewire::withQueryParams([
         'manage' => 'vendor/settings-extension',
         'surface' => 'abstract-page-test',
     ])
@@ -1672,6 +1701,19 @@ it('opens package settings through URL query parameters', function (): void {
         ->assertSchemaStateSet([
             'headline' => 'Existing setting',
         ]);
+
+    $action = $component->instance()->getMountedAction();
+    expect($action)->toBeInstanceOf(Action::class);
+    assert($action instanceof Action);
+    expect($action->getModalSubmitActionLabel())->toBe(__('capell-admin::button.settings.save'))
+        ->and($action->getModalCancelActionLabel())->toBe(__('capell-admin::button.cancel'));
+
+    $component->fillForm(['headline' => 'Saved through query parameters'])
+        ->callMountedAction()
+        ->assertHasNoActionErrors()
+        ->assertNotified(__('capell-admin::message.settings_saved'));
+
+    expect(AbstractPackageSettingsPageTestSettings::$savedValues['headline'] ?? null)->toBe('Saved through query parameters');
 });
 
 it('does not expose settings management for extensions without a management page', function (): void {
@@ -1882,3 +1924,54 @@ function extensionsPageComposerRemoveProcess(string $packageName, bool $successf
 
     return $process;
 }
+
+it('saves and reloads settings generated by the full scaffold through extension management', function (): void {
+    grantExtensionsPageAccess();
+    $directory = sys_get_temp_dir() . '/capell-generated-settings-' . bin2hex(random_bytes(6));
+    ScaffoldPackageAction::run(new PackageScaffoldInputData(
+        packageName: 'vendor/consumer-settings',
+        namespace: 'Vendor\\ConsumerSettings',
+        slug: 'consumer-settings',
+        displayName: 'Consumer Settings',
+        tier: 'free',
+        targetPath: $directory,
+        profile: PackageScaffoldProfile::Full,
+    ));
+    require $directory . '/src/Settings/PackageSettings.php';
+    require $directory . '/src/Providers/AdminServiceProvider.php';
+    $settingsClass = 'Vendor\\ConsumerSettings\\Settings\\PackageSettings';
+    throw_unless(is_subclass_of($settingsClass, Settings::class), RuntimeException::class, 'Generated settings must persist values.');
+    throw_unless(is_a($settingsClass, SettingsContract::class, true), RuntimeException::class, 'Generated settings must implement the Capell settings contract.');
+    $migrations = glob($directory . '/database/settings/*.php');
+    throw_unless(is_array($migrations), RuntimeException::class, 'Settings migrations could not be read.');
+    expect($migrations)->toHaveCount(1);
+    foreach ($migrations as $migration) {
+        (require $migration)->up();
+    }
+
+    CapellCore::registerPackage(name: 'vendor/consumer-settings', path: $directory, version: '1.0.0', setting: $settingsClass);
+    $providerClass = 'Vendor\\ConsumerSettings\\Providers\\AdminServiceProvider';
+    throw_unless(is_subclass_of($providerClass, ServiceProvider::class), RuntimeException::class, 'Generated provider must boot.');
+    // The full profile requires Layout Builder, which the host has already installed.
+    CapellCore::registerPackage(name: 'capell-app/layout-builder', version: '1.0.0');
+    CapellCore::markPackageInstalled('capell-app/layout-builder');
+    // The generated runtime provider extends Layout Builder, so register its settings here.
+    resolve(PackageSurfaceRegistrar::class)->settingsClass($settingsClass::group(), $settingsClass);
+    // Loaded before enablement, the generated Admin provider must offer its own management surface once enabled.
+    app()->register($providerClass);
+    EnablePackageAction::run(CapellCore::getPackage('vendor/consumer-settings'));
+
+    Livewire::test(InstalledExtensionsFilamentWidget::class)
+        ->assertTableActionVisible('manageExtension', 'vendor/consumer-settings')
+        ->mountTableAction('manageExtension', 'vendor/consumer-settings')
+        ->assertSchemaStateSet(['public_label' => ''])
+        ->fillForm(['public_label' => 'Persisted label'])
+        ->callMountedAction()
+        ->assertHasNoActionErrors();
+
+    app()->forgetInstance($settingsClass);
+    expect(resolve($settingsClass)->toArray()['public_label'])->toBe('Persisted label');
+    Livewire::test(InstalledExtensionsFilamentWidget::class)
+        ->mountTableAction('manageExtension', 'vendor/consumer-settings')
+        ->assertSchemaStateSet(['public_label' => 'Persisted label']);
+});
