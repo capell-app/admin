@@ -54,6 +54,7 @@ use Capell\Core\Models\Layout;
 use Capell\Core\Models\Page as PageModel;
 use Capell\Core\Models\Site;
 use Capell\Core\Support\Permissions\SiteAccess;
+use Capell\Core\Support\TableName;
 use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
 use Filament\Actions\BulkAction;
@@ -184,6 +185,10 @@ class PagesTable implements TableConfigurator
     public static function getBaseTableFilters(): array
     {
         return [
+            Filter::make('owned_drafts')
+                ->label(__('capell-admin::dashboard.work_first_owned_drafts'))
+                ->query(self::applyOwnedDraftsFilter(...)),
+
             SelectFilter::make('site_id')
                 ->label(__('capell-admin::form.site'))
                 ->default(self::currentSiteFilterDefault(...))
@@ -485,6 +490,12 @@ class PagesTable implements TableConfigurator
         }
 
         return self::getLanguageSearchResults($livewire);
+    }
+
+    /** @param Builder<PageModel> $query */
+    protected static function applyOwnedDraftsFilter(Builder $query): void
+    {
+        $query->draft()->where('created_by', auth()->id() ?? -1);
     }
 
     /**
@@ -804,7 +815,7 @@ class PagesTable implements TableConfigurator
     {
         $relevance = CapellDatabase::for($query->getModel())
             ->queryDialect()
-            ->textRelevance(SqlFragment::raw($query->getQuery()->getGrammar()->wrap('pages.name')), $search);
+            ->textRelevance(SqlFragment::raw($query->getQuery()->getGrammar()->wrap(TableName::resolve('pages') . '.name')), $search);
 
         $query->where('name', 'like', sprintf('%%%s%%', $search))
             ->orWhereHas(
@@ -847,7 +858,7 @@ class PagesTable implements TableConfigurator
             parse_url((string) config('app.url'), PHP_URL_HOST),
         );
 
-        $query->whereColumn('site_domains.language_id', 'page_urls.language_id');
+        $query->whereColumn(TableName::resolve('site_domains') . '.language_id', TableName::resolve('page_urls') . '.language_id');
 
         new SqlFragment($url->sql . ' LIKE ?', [...$url->bindings, sprintf('%%%s%%', $search)])
             ->applyWhere($query->getQuery());
@@ -989,7 +1000,7 @@ class PagesTable implements TableConfigurator
         if ($activeTabSiteId !== null) {
             $query->whereHas(
                 'sites',
-                fn (BuilderContract $query): BuilderContract => $query->where('sites.id', $activeTabSiteId),
+                fn (BuilderContract $query): BuilderContract => $query->where(TableName::resolve('sites') . '.id', $activeTabSiteId),
             );
         }
 

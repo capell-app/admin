@@ -6,7 +6,12 @@ namespace Capell\Admin\Actions;
 
 use Capell\Core\Models\Language;
 use Capell\Core\Models\Site;
+use Capell\Core\Models\SiteDomain;
+use Capell\Core\Support\Permissions\SiteAccess;
+use Capell\Core\Support\SiteDomains\SiteDomainAddressing;
 use Illuminate\Support\Arr;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 use Lorisleiva\Actions\Concerns\AsFake;
 use Lorisleiva\Actions\Concerns\AsObject;
 
@@ -18,7 +23,7 @@ class SetupSiteLanguageAction
     use AsFake;
     use AsObject;
 
-    public function handle(Site $site, Language $language): void
+    private function setUp(Site $site, Language $language): void
     {
         $translation = $site->translations()->first();
         $translationValues = $translation !== null
@@ -45,7 +50,7 @@ class SetupSiteLanguageAction
         $siteDomain = $site->siteDomains()->first();
 
         if ($siteDomain !== null) {
-            $path = '/' . $language->code;
+            $path = SiteDomainAddressing::languagePath($siteDomain->path, $siteDomain->language?->code, $language->code);
 
             $replica = $siteDomain->replicate([
                 'routing_identity',
@@ -54,11 +59,51 @@ class SetupSiteLanguageAction
                 'language_id' => $language->id,
                 'path' => $path,
             ]);
+
+            $this->assertRouteIsFree($replica, $language);
+
             $replica->save();
 
             return;
         }
 
         $site->siteDomains()->create(['language_id' => $language->id]);
+    }
+
+    public function handle(Site $site, Language $language): void
+    {
+        DB::transaction(function () use ($site, $language): void {
+            $this->setUp($site, $language);
+        });
+    }
+
+    private function assertRouteIsFree(SiteDomain $candidate, Language $language): void
+    {
+        $identity = SiteDomainAddressing::routingIdentity(
+            $candidate->getAttributes()['scheme'] ?? null,
+            $candidate->getAttributes()['domain'] ?? null,
+            $candidate->getAttributes()['port'] ?? null,
+            $candidate->path,
+        );
+
+        $existing = SiteDomain::query()->where('routing_identity', $identity)->with('site')->first();
+
+        if (! $existing instanceof SiteDomain) {
+            return;
+        }
+
+        // The owning site's URL and name are only disclosed to an editor who can
+        // access that site; everyone else learns only that the address is taken.
+        $message = SiteAccess::current()->can($existing->site)
+            ? __('capell-admin::message.site_language_route_taken', [
+                'language' => $language->name,
+                'url' => $existing->full_url,
+                'site' => $existing->site->name,
+            ])
+            : __('capell-admin::message.site_language_route_taken_generic', [
+                'language' => $language->name,
+            ]);
+
+        throw ValidationException::withMessages(['path' => $message]);
     }
 }

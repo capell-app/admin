@@ -109,6 +109,76 @@ it('manages language-backed tabs through the mounted repeater component', functi
     expect($component->getState())->toHaveCount(5);
 });
 
+it('does not resolve a dynamic Livewire property when modal state has not been mounted', function (string $statePath): void {
+    $livewire = new class extends Livewire
+    {
+        /** @param mixed $property */
+        public function __isset($property): bool
+        {
+            throw new RuntimeException('Unexpected dynamic property lookup: ' . $property);
+        }
+    };
+
+    $defaultEvaluations = 0;
+    $component = RepeaterTabs::make('translations')->tabs([TextInput::make('title')])
+        ->activeTab(function () use (&$defaultEvaluations): int {
+            $defaultEvaluations++;
+
+            return 2;
+        });
+    $schema = Schema::make($livewire)->statePath($statePath)->components([$component]);
+    $mounted = $schema->getComponents()[0];
+    assert($mounted instanceof RepeaterTabs);
+
+    expect($mounted->getActiveTab())->toBe(1)
+        ->and($defaultEvaluations)->toBe(1);
+})->with(['', 'unmountedModal.data']);
+
+it('reads rootless tab selection and applies the configured default', function (): void {
+    $livewire = new class extends Livewire
+    {
+        public ?int $activeTab = 2;
+
+        /** @var array<string, array<string, string>> */
+        public array $translations = [
+            'first' => ['title' => 'First'],
+            'second' => ['title' => 'Second'],
+        ];
+    };
+    $component = RepeaterTabs::make('translations')->tabs([TextInput::make('title')])->activeTab(2);
+    $schema = Schema::make($livewire)->statePath('')->components([$component]);
+    $mounted = $schema->getComponents()[0];
+    assert($mounted instanceof RepeaterTabs);
+
+    expect($mounted->getActiveTabStatePath())->toBe('activeTab')
+        ->and($mounted->getActiveTab())->toBe(2);
+
+    $livewire->activeTab = null;
+
+    expect($mounted->getActiveTab())->toBe(2);
+});
+
+it('reads a selected tab from nested mounted action state', function (int $depth): void {
+    $livewire = new class extends Livewire
+    {
+        /** @var array<int, array<string, mixed>> */
+        public array $mountedActions = [];
+    };
+    $livewire->mountedActions[$depth] = ['data' => [
+        'activeTab' => 2,
+        'translations' => [
+            'first' => ['title' => 'First'],
+            'second' => ['title' => 'Second'],
+        ],
+    ]];
+    $component = RepeaterTabs::make('translations')->tabs([TextInput::make('title')]);
+    $schema = Schema::make($livewire)->statePath('mountedActions.' . $depth . '.data')->components([$component]);
+    $mounted = $schema->getComponents()[0];
+    assert($mounted instanceof RepeaterTabs);
+
+    expect($mounted->getActiveTab())->toBe(2);
+})->with([1, 2]);
+
 it('honours persisted query-string tab selection and blocked add callbacks', function (): void {
     request()->query->set('translation-tab', 'second-tab');
 
@@ -388,6 +458,87 @@ it('renders independent projections with unique identities and valid panel label
         }
     }
 })->with([false, true]);
+
+it('renders compiled Alpine state and position-based panel bindings with no literal Blade directives', function (): void {
+    view()->share('errors', new ViewErrorBag);
+    $livewire = Livewire::make()->data([
+        'translations' => [
+            'record-42' => ['title' => 'French title'],
+            'record-43' => ['title' => 'English title'],
+        ],
+    ]);
+    $schema = Schema::make($livewire)->statePath('data')->components([
+        RepeaterTabs::make('translations')->key('content-editor')
+            ->tabs([TextInput::make('title')])->itemLabel(fn (array $state): string => $state['title'])
+            ->addable(false)->deletable(false),
+    ]);
+
+    $document = new DOMDocument;
+    $html = $schema->toHtml();
+    throw_if($html === '', RuntimeException::class, 'The repeater schema rendered no HTML.');
+    $previousLibxmlErrors = libxml_use_internal_errors(true);
+    try {
+        $document->loadHTML($html);
+    } finally {
+        libxml_clear_errors();
+        libxml_use_internal_errors($previousLibxmlErrors);
+    }
+
+    $xpath = new DOMXPath($document);
+    $wrappers = $xpath->query('//*[@x-data[contains(., "capellRepeaterTabs")]]');
+    throw_if($wrappers === false, RuntimeException::class, 'Invalid wrapper query.');
+    expect($wrappers->length)->toBe(1);
+
+    $wrapper = $wrappers->item(0);
+    throw_unless($wrapper instanceof DOMElement, RuntimeException::class, 'Expected the repeater wrapper element.');
+    $alpineData = $wrapper->getAttribute('x-data');
+    $refresh = $wrapper->getAttribute('x-on:refresh-tabs.window');
+
+    expect($alpineData)->toBe('capellRepeaterTabs({ activeTab: $wire.$entangle(\'data.activeTab\') })')
+        ->and($refresh)->not->toContain('@js')->toContain('refresh($event.detail.tabId)');
+
+    $panelBindings = $xpath->query('//*[@role="tabpanel"]/@x-show');
+    throw_if($panelBindings === false, RuntimeException::class, 'Invalid panel binding query.');
+    expect($panelBindings->length)->toBe(2);
+
+    foreach ($panelBindings as $binding) {
+        expect($binding->nodeValue)->toBe('isActive($el)');
+    }
+});
+
+it('uses the same state path for query-string tab watching and entanglement', function (string $containerPath, string $expectedPath): void {
+    view()->share('errors', new ViewErrorBag);
+    $livewire = new class extends Livewire
+    {
+        /** @var array<string, array<string, string>> */
+        public array $translations = ['first' => ['title' => 'First']];
+    };
+    $livewire->data(['translations' => $livewire->translations]);
+
+    $schema = Schema::make($livewire)->statePath($containerPath)->components([
+        RepeaterTabs::make('translations')->tabs([TextInput::make('title')])
+            ->addable(false)->deletable(false)->persistTabInQueryString('tab')->syncActiveTabWithServer(),
+    ]);
+    $document = new DOMDocument;
+    $previousLibxmlErrors = libxml_use_internal_errors(true);
+    try {
+        $html = $schema->toHtml();
+        expect($html)->not->toBeEmpty();
+        assert($html !== '');
+        $document->loadHTML($html);
+    } finally {
+        libxml_clear_errors();
+        libxml_use_internal_errors($previousLibxmlErrors);
+    }
+
+    $wrappers = new DOMXPath($document)->query('//*[@x-data[contains(., "capellRepeaterTabs")]]');
+    throw_unless($wrappers !== false && $wrappers->length === 1, RuntimeException::class);
+    $wrapper = $wrappers->item(0);
+    throw_unless($wrapper instanceof DOMElement, RuntimeException::class);
+
+    expect($wrapper->getAttribute('x-data'))->toContain("\$wire.\$entangle('" . $expectedPath . "')")
+        ->and($wrapper->getAttribute('x-init'))->toContain("\$wire.set('" . $expectedPath . "', value)");
+})->with([['', 'activeTab'], ['data', 'data.activeTab']]);
 
 it('completes nested fields when their metadata container is entirely absent', function (): void {
     $component = mountedRepeaterTabs(

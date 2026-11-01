@@ -16,6 +16,7 @@ use Filament\Resources\Resource;
 use Filament\Widgets\Widget;
 use LogicException;
 
+/** @experimental */
 final class AdminSurfaceContributionRegistry
 {
     /** @var array<string, array<string, AdminSurfaceContributionData>> */

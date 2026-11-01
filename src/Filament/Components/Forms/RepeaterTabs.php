@@ -258,15 +258,23 @@ class RepeaterTabs extends Repeater
             $this->activeTab = $this->getDefaultTab();
         }
 
-        $activeTab = data_get($this->getLivewire(), $this->getActiveTabStatePath());
-        $selected = $activeTab ?? $this->evaluate($this->activeTab);
+        $livewireState = get_object_vars($this->getLivewire());
+        $statePath = $this->getActiveTabStatePath();
+        $root = explode('.', $this->getStatePath() ?? '', 2)[0];
 
-        return max(1, min((int) $selected, max(1, count((array) $this->getState()))));
+        // Missing state must not invoke Filament's dynamic action/schema lookup while a modal is mounting.
+        $activeTab = data_get($livewireState, $statePath);
+        $selected = $activeTab ?? $this->evaluate($this->activeTab);
+        $state = isset($livewireState[$root]) ? (array) $this->getState() : [];
+
+        return max(1, min((int) $selected, max(1, count($state))));
     }
 
     public function getActiveTabStatePath(): string
     {
-        return $this->getContainer()->getStatePath() . '.activeTab';
+        $containerStatePath = $this->getContainer()->getStatePath();
+
+        return filled($containerStatePath) ? $containerStatePath . '.activeTab' : 'activeTab';
     }
 
     #[Override]
@@ -392,6 +400,9 @@ class RepeaterTabs extends Repeater
         throw_if(! $childSchema instanceof Schema, RuntimeException::class, 'Repeater tab child schema could not be resolved.');
 
         return $this->evaluate($this->itemBadge, [
+            'container' => $childSchema,
+            'item' => $childSchema,
+            'schema' => $childSchema,
             'state' => $childSchema->getRawState(),
             'uuid' => $uuid,
         ]);

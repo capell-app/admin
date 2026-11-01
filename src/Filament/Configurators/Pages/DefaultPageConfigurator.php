@@ -27,6 +27,7 @@ use Capell\Admin\Filament\Concerns\HasConfigurator;
 use Capell\Admin\Filament\Concerns\HasDefaultRelationManagers;
 use Capell\Admin\Filament\Livewire\PageScratchDraftPanel;
 use Capell\Admin\Filament\Livewire\PublishStatusPanel;
+use Capell\Admin\Filament\Resources\Pages\Pages\EditPage;
 use Capell\Admin\Support\Configurators\ConfiguratorResolver;
 use Capell\Admin\Support\Schemas\AdminSchemaExtensionPipeline;
 use Capell\Core\Enums\BlueprintGroupEnum;
@@ -302,6 +303,9 @@ class DefaultPageConfigurator implements ConfiguratorInterface, ProvidesRelation
 
         return Livewire::make(PageScratchDraftPanel::class, [
             'pageId' => (int) ($record instanceof Model ? $record->getKey() : 0),
+            'currentContext' => $schema->getLivewire() instanceof EditPage
+                ? $schema->getLivewire()->scratchDraftContext
+                : null,
         ]);
     }
 
@@ -333,6 +337,7 @@ class DefaultPageConfigurator implements ConfiguratorInterface, ProvidesRelation
                                 ->sourceStatePath('meta.image_source')
                                 ->imageSourcePolicy(blueprintSources: $this->blueprintImageSourcePolicy($schema, 'image')),
                         ],
+                        pageGroup: $this->context->resourceName ?? 'page',
                     ),
                     // The editOption quick-edit modal can't host the full Livewire
                     // panel cleanly, so keep a slim inline publish-date field here.
@@ -360,7 +365,7 @@ class DefaultPageConfigurator implements ConfiguratorInterface, ProvidesRelation
 
         $components = [
             ...$this->resolveTranslationHookComponents($schema, PageTranslationSchemaHookEnum::BeforeTitle),
-            TitleWithSlugInput::make($schema),
+            TitleWithSlugInput::makeForContext($schema, $this->context),
             ...$this->resolveTranslationHookComponents($schema, PageTranslationSchemaHookEnum::AfterTitle),
             $this->getContentEditor($schema),
             ...$this->resolveTranslationHookComponents($schema, PageTranslationSchemaHookEnum::AfterContentEditor),

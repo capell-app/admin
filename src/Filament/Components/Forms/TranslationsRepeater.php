@@ -21,6 +21,7 @@ use Capell\Core\Models\Site;
 use Capell\Core\Models\Translation;
 use Capell\Core\Support\CapellCoreHelper;
 use Capell\Core\Support\Permissions\SiteAccess;
+use Capell\Core\Support\TableName;
 use Closure;
 use DateTimeInterface;
 use Filament\Actions\Action;
@@ -104,7 +105,7 @@ class TranslationsRepeater extends RepeaterTabs
 
                 return __('capell-admin::generic.tab');
             })
-            ->itemBadge(function (RepeaterTabs $component, string $uuid): ?array {
+            ->itemBadge(function (RepeaterTabs $component, Schema $item, string $uuid): ?array {
                 if ($component->getRelationship() === null) {
                     return null;
                 }
@@ -119,12 +120,14 @@ class TranslationsRepeater extends RepeaterTabs
                 }
 
                 /**
+                 * Keys come from the item's own schema, bound to the Translation record, so
+                 * relationship-bound fields never resolve against the parent model.
                  * CheckTranslationCompletenessAction accepts the nested key shape generated
                  * by GetFlatComponentKeysAction, but its static contract is narrower.
                  *
                  * @var array<string, array<int, string>|null> $keys
                  */
-                $keys = GetFlatComponentKeysAction::run($component);
+                $keys = GetFlatComponentKeysAction::run($item);
 
                 return $this->resolveItemBadge($record, $keys);
             })
@@ -567,11 +570,11 @@ class TranslationsRepeater extends RepeaterTabs
         return $query
             ->with(['language'])
             ->select($query->getModel()->qualifyColumn('*'))
-            ->join('languages', $query->getModel()->qualifyColumn('language_id'), '=', 'languages.id')
-            ->whereNull('languages.deleted_at')
-            ->orderByDesc('languages.default')
-            ->orderBy('languages.order')
-            ->orderBy('languages.name');
+            ->join(TableName::resolve('languages'), $query->getModel()->qualifyColumn('language_id'), '=', TableName::resolve('languages') . '.id')
+            ->whereNull(TableName::resolve('languages') . '.deleted_at')
+            ->orderByDesc(TableName::resolve('languages') . '.default')
+            ->orderBy(TableName::resolve('languages') . '.order')
+            ->orderBy(TableName::resolve('languages') . '.name');
     }
 
     private function resolveTypeRecord(?Model $record): ?Blueprint

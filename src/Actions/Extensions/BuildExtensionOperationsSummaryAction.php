@@ -27,6 +27,7 @@ use Capell\Core\Support\Manifest\CapellManifestData;
 use Capell\Core\Support\Marketplace\MarketplaceAssetUrl;
 use Capell\Core\Support\PackageRegistry\CapellPackageRegistry;
 use Capell\Core\Support\Permissions\SiteAccess;
+use Capell\Core\Support\TableName;
 use Illuminate\Database\ConnectionResolverInterface;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
@@ -467,7 +468,7 @@ final class BuildExtensionOperationsSummaryAction
             return $path;
         }
 
-        if (Route::has('capell-admin.extension-asset') && ResolveExtensionAssetPathAction::run($manifest, $path) !== null) {
+        if (Route::has('capell-admin.extension-asset') && ResolveExtensionAssetPathAction::run($manifest, $path, verifyDecode: false) !== null) {
             return route('capell-admin.extension-asset', [
                 'package' => $manifest->name,
                 'path' => $path,
@@ -597,9 +598,9 @@ final class BuildExtensionOperationsSummaryAction
         }
 
         try {
-            return resolve(RuntimeSchemaState::class)->hasColumn('marketplace_instances', 'connected_at')
-                ? resolve(ConnectionResolverInterface::class)->table('marketplace_instances')->whereNotNull('connected_at')->exists()
-                : resolve(ConnectionResolverInterface::class)->table('marketplace_instances')->exists();
+            return resolve(RuntimeSchemaState::class)->hasColumn(TableName::resolve('marketplace_instances'), 'connected_at')
+                ? resolve(ConnectionResolverInterface::class)->table(TableName::resolve('marketplace_instances'))->whereNotNull('connected_at')->exists()
+                : resolve(ConnectionResolverInterface::class)->table(TableName::resolve('marketplace_instances'))->exists();
         } catch (Throwable) {
             return false;
         }

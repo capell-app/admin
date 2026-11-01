@@ -23,6 +23,10 @@ use Capell\Admin\Filament\Widgets\Dashboard\RecentActivityFilamentWidget;
 use Capell\Admin\Filament\Widgets\Dashboard\RecentlyPublishedFilamentWidget;
 use Capell\Admin\Filament\Widgets\Dashboard\SiteStatsOverviewFilamentWidget;
 use Capell\Admin\Filament\Widgets\Dashboard\UpdateAdvisoryFilamentWidget;
+use Capell\Admin\Filament\Widgets\Dashboard\WorkFirst\PageViewsWidget;
+use Capell\Admin\Filament\Widgets\Dashboard\WorkFirst\PersonalDraftsWidget;
+use Capell\Admin\Filament\Widgets\Dashboard\WorkFirst\PopularPagesWidget;
+use Capell\Admin\Filament\Widgets\Dashboard\WorkFirst\RisingPagesWidget;
 use Capell\Admin\Filament\Widgets\Extensions\ExtensionActionsFilamentWidget;
 use Capell\Admin\Filament\Widgets\Extensions\ExtensionHealthFilamentWidget;
 use Capell\Admin\Filament\Widgets\Extensions\ExtensionStatsOverviewFilamentWidget;
@@ -59,7 +63,7 @@ it('registers built-in dashboard Filament widgets by default', function (): void
         ->not->toContain(MyWorkQueueFilamentWidget::class)
         ->not->toContain(RecentlyPublishedFilamentWidget::class)
         ->not->toContain(PageStatusFilamentWidget::class)
-        ->not->toContain(SiteStatsOverviewFilamentWidget::class)
+        ->toContain(SiteStatsOverviewFilamentWidget::class)
         ->not->toContain(UpdateAdvisoryFilamentWidget::class)
         ->toContain(RecentActivityFilamentWidget::class)
         ->toContain(ListPagesFilamentWidget::class);
@@ -97,6 +101,7 @@ it('orders dashboard Filament widgets by their filament sort value', function ()
         NeedsAttentionFilamentWidget::class,
         ListPagesFilamentWidget::class,
         RecentActivityFilamentWidget::class,
+        SiteStatsOverviewFilamentWidget::class,
         MarketplaceCommercialWarningFilamentWidget::class,
         MarketplacePackageOperationsAlertFilamentWidget::class,
     ]);
@@ -185,6 +190,7 @@ it('falls back to filament sort values after pinned dashboard Filament widgets w
             NeedsAttentionFilamentWidget::class,
             ListPagesFilamentWidget::class,
             RecentActivityFilamentWidget::class,
+            SiteStatsOverviewFilamentWidget::class,
             MarketplaceCommercialWarningFilamentWidget::class,
             MarketplacePackageOperationsAlertFilamentWidget::class,
         ]);
@@ -388,3 +394,45 @@ function assertOptionalDashboardFilamentWidgetsKeepNativeColumnSpan(array $widge
         expect((new $widgetClass)->getColumnSpan())->toBe($expectedColumnSpan);
     }
 }
+
+it('opts existing dashboards into the work-first widget list only when enabled', function (): void {
+    test()->actingAsAdmin();
+    Site::factory()->createOne();
+
+    config()->set('capell-admin.dashboard.work_first.enabled', false);
+    expect((new CapellDashboard)->getWidgets())->not->toContain(PersonalDraftsWidget::class);
+
+    config()->set('capell-admin.dashboard.work_first.enabled', true);
+    expect((new CapellDashboard)->getWidgets())->toContain(PersonalDraftsWidget::class)
+        ->not->toContain(AnalyticsOverviewFilamentWidget::class)
+        ->not->toContain(AnalyticsTrendFilamentWidget::class)
+        ->not->toContain(MarketingStudioQuickActionsFilamentWidget::class)
+        ->not->toContain(ListPagesFilamentWidget::class);
+
+    config()->set('capell-admin.dashboard.work_first.widgets', ['your_work' => false]);
+    expect((new CapellDashboard)->getWidgets())->not->toContain(PersonalDraftsWidget::class)
+        ->and(PersonalDraftsWidget::canView())->toBeFalse();
+});
+
+it('stops mounted analytics reads when their class switch is disabled', function (string $widgetClass): void {
+    test()->actingAsAdmin();
+    Site::factory()->createOne();
+    config()->set('capell-admin.dashboard.work_first.enabled', true);
+    $widget = match ($widgetClass) {
+        PageViewsWidget::class => new PageViewsWidget,
+        PopularPagesWidget::class => new PopularPagesWidget,
+        RisingPagesWidget::class => new RisingPagesWidget,
+        default => throw new LogicException('Unsupported analytics widget fixture.'),
+    };
+    $component = \Livewire\Livewire::test($widgetClass);
+    expect($widgetClass::canView())->toBeTrue();
+
+    config()->set('capell-admin.dashboard.work_first.widgets', [$widgetClass => false]);
+    $component->call('$refresh');
+    expect($widget->data()->status)->toBe('unauthorised');
+    expect($widgetClass::canView())->toBeFalse();
+})->with([
+    PageViewsWidget::class,
+    PopularPagesWidget::class,
+    RisingPagesWidget::class,
+]);

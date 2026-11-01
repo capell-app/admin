@@ -82,6 +82,35 @@ it('admin can see edit page', function (): void {
         ->assertOk();
 });
 
+it('renders executable Alpine attributes for the translation tabs', function (): void {
+    test()->actingAsAdmin();
+    $language = Language::factory()->default()->createOne();
+    $french = Language::factory()->french()->createOne();
+    $site = Site::factory()->language($language)->withTranslations([$language, $french])->createOne();
+    $page = Page::factory()->site($site)->withTranslations([$language, $french])->createOne();
+    $response = get(PageResource::getUrl('edit', ['record' => $page]))->assertOk();
+    $html = $response->getContent();
+    throw_if(! is_string($html) || $html === '', RuntimeException::class, 'The page response was empty.');
+
+    $document = new DOMDocument;
+    $previousLibxmlErrors = libxml_use_internal_errors(true);
+    try {
+        $document->loadHTML($html);
+    } finally {
+        libxml_clear_errors();
+        libxml_use_internal_errors($previousLibxmlErrors);
+    }
+
+    $elements = new DOMXPath($document)->query('//*[contains(@x-data, "capellRepeaterTabs")]');
+    throw_if($elements === false, RuntimeException::class, 'The translation tabs query was invalid.');
+    $element = $elements->item(0);
+    throw_unless($element instanceof DOMElement, RuntimeException::class, 'Translation tabs were not rendered.');
+
+    expect($element->getAttribute('x-data'))->toContain('data.activeTab')->not->toContain('@js(')
+        ->and($element->getAttribute('x-init'))->toContain('$watch(')->not->toContain('&#039;', '&gt;')
+        ->and($element->getAttribute('x-on:refresh-tabs.window'))->toContain('data.translations')->not->toContain('@js(');
+});
+
 it('applies page resource defaults and extension widgets for the admin surface', function (): void {
     test()->actingAsAdmin();
     $language = Language::factory()->english()->createOne();
@@ -251,7 +280,7 @@ it('mounts quick create with layout defaults for the context site', function (st
 it('preserves unsupported content and clears stale choices when a creation form changes site', function (bool $quickCreate): void {
     test()->actingAsAdmin();
     $english = Language::factory()->createOne(['default' => true]);
-    $french = Language::factory()->createOne(['default' => false]);
+    $french = Language::factory()->createOne(['default' => false, 'name' => "Lao People's Democratic Republic"]);
     $siteA = Site::factory()->language($english)->withTranslations([$english, $french])->createOne();
     $siteB = Site::factory()->language($english)->withTranslations($english)->createOne();
     Blueprint::factory()->page()->default()->createOne();
@@ -289,7 +318,7 @@ it('preserves unsupported content and clears stale choices when a creation form 
     $siteSelect = expectPresent($schema)->getComponent('site_id');
     assert($siteSelect instanceof SiteSelect);
     expect(validator(['site_id' => $siteB->id], ['site_id' => $siteSelect->getValidationRules()])->fails())->toBeTrue();
-    expect($siteSelect->getChildSchema(SiteSelect::BELOW_CONTENT_SCHEMA_KEY)?->toHtml())->toContain($french->name);
+    expect($siteSelect->getChildSchema(SiteSelect::BELOW_CONTENT_SCHEMA_KEY)?->toHtml())->toContain(e($french->name));
 
     $form->set($statePath . '.site_id', $siteA->id);
     $restored = $form->get($statePath . '.translations');
@@ -386,12 +415,24 @@ it('activates a retained translation after confirming language removal', functio
     $click = new Process(['node', '--input-type=module', '-e', <<<'JS_WRAP'
     import { readFileSync } from 'node:fs';
     import capellRepeaterTabs from './packages/admin/resources/js/components/repeater-tabs.js';
-    const { handler, activeTab } = JSON.parse(readFileSync(0, 'utf8'));
+    const { handler, activeTab, panelCount, panelPosition } = JSON.parse(readFileSync(0, 'utf8'));
     const state = capellRepeaterTabs({ activeTab });
-    new Function(`with (this) { ${handler} }`).call(state);
+    // Alpine supplies $el: the panel that fired the event, among its sibling panels.
+    const panels = Array.from({ length: panelCount }, () => ({
+        matches: () => true,
+        get parentElement() {
+            return { children: panels };
+        },
+    }));
+    new Function('$el', `with (this) { ${handler} }`).call(state, panels[panelPosition]);
     process.stdout.write(JSON.stringify({ tab: state.tab, focusedTab: state.focusedTab }));
     JS_WRAP]);
-    $click->setInput(json_encode(['handler' => $tab->getAttribute($event), 'activeTab' => $repeater->getActiveTab()], JSON_THROW_ON_ERROR));
+    $click->setInput(json_encode([
+        'handler' => $tab->getAttribute($event),
+        'activeTab' => $repeater->getActiveTab(),
+        'panelCount' => $tabs->length,
+        'panelPosition' => $retainActive ? 2 : 1,
+    ], JSON_THROW_ON_ERROR));
     $click->mustRun();
 
     $selection = json_decode($click->getOutput(), true, flags: JSON_THROW_ON_ERROR);

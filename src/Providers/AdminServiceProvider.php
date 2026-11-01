@@ -28,6 +28,11 @@ use Capell\Admin\Contracts\Bridges\UserResourceBridge;
 use Capell\Admin\Contracts\Cache\StaticSiteGenerationDispatcher;
 use Capell\Admin\Contracts\Dashboard\ContentHealthDataProvider;
 use Capell\Admin\Contracts\Dashboard\DashboardAnalyticsDataProvider;
+use Capell\Admin\Contracts\Dashboard\DashboardApprovalsDataProvider;
+use Capell\Admin\Contracts\Dashboard\DashboardPageLanguageMatcher;
+use Capell\Admin\Contracts\Dashboard\DashboardPageRankingProvider;
+use Capell\Admin\Contracts\Dashboard\DashboardVisitorsProvider;
+use Capell\Admin\Contracts\Dashboard\DashboardWorkDataProvider;
 use Capell\Admin\Contracts\Dashboard\MyWorkQueueDataProvider;
 use Capell\Admin\Contracts\Dashboard\RecentlyPublishedDataProvider;
 use Capell\Admin\Contracts\Dashboard\SiteStatsDataProvider;
@@ -96,6 +101,7 @@ use Capell\Admin\Filament\Widgets\Dashboard\CapellInfoFilamentWidget;
 use Capell\Admin\Filament\Widgets\Dashboard\ListPagesFilamentWidget;
 use Capell\Admin\Filament\Widgets\Dashboard\NeedsAttentionFilamentWidget;
 use Capell\Admin\Filament\Widgets\Dashboard\RecentActivityFilamentWidget;
+use Capell\Admin\Filament\Widgets\Dashboard\SiteStatsOverviewFilamentWidget;
 use Capell\Admin\Filament\Widgets\Extensions\ExtensionActionsFilamentWidget;
 use Capell\Admin\Filament\Widgets\Extensions\ExtensionDependencyGraphFilamentWidget;
 use Capell\Admin\Filament\Widgets\Extensions\ExtensionDiagnosticsFilamentWidget;
@@ -172,7 +178,12 @@ use Capell\Admin\Support\Dashboard\AdminDashboardDataRequestCache;
 use Capell\Admin\Support\Dashboard\DashboardFilamentWidgetRegistry;
 use Capell\Admin\Support\Dashboard\DefaultDashboardAnalyticsDataProvider;
 use Capell\Admin\Support\Dashboard\DefaultSiteStatsDataProvider;
+use Capell\Admin\Support\Dashboard\NativeDashboardPageLanguageMatcher;
 use Capell\Admin\Support\Dashboard\NullContentHealthDataProvider;
+use Capell\Admin\Support\Dashboard\NullDashboardApprovalsDataProvider;
+use Capell\Admin\Support\Dashboard\NullDashboardPageRankingProvider;
+use Capell\Admin\Support\Dashboard\NullDashboardVisitorsProvider;
+use Capell\Admin\Support\Dashboard\NullDashboardWorkDataProvider;
 use Capell\Admin\Support\Dashboard\NullMyWorkQueueDataProvider;
 use Capell\Admin\Support\Dashboard\NullRecentlyPublishedDataProvider;
 use Capell\Admin\Support\Dashboard\OverviewStatRegistry;
@@ -512,6 +523,11 @@ class AdminServiceProvider extends AbstractPackageServiceProvider
 
         $this->app->singletonIf(ContentHealthDataProvider::class, NullContentHealthDataProvider::class);
         $this->app->singletonIf(DashboardAnalyticsDataProvider::class, DefaultDashboardAnalyticsDataProvider::class);
+        $this->app->singletonIf(DashboardApprovalsDataProvider::class, NullDashboardApprovalsDataProvider::class);
+        $this->app->singletonIf(DashboardWorkDataProvider::class, NullDashboardWorkDataProvider::class);
+        $this->app->singletonIf(DashboardVisitorsProvider::class, NullDashboardVisitorsProvider::class);
+        $this->app->singletonIf(DashboardPageRankingProvider::class, NullDashboardPageRankingProvider::class);
+        $this->app->singletonIf(DashboardPageLanguageMatcher::class, NativeDashboardPageLanguageMatcher::class);
         $this->app->singletonIf(RecentlyPublishedDataProvider::class, NullRecentlyPublishedDataProvider::class);
         $this->app->singletonIf(MyWorkQueueDataProvider::class, NullMyWorkQueueDataProvider::class);
         $this->app->singletonIf(SiteStatsDataProvider::class, DefaultSiteStatsDataProvider::class);
@@ -1018,6 +1034,7 @@ class AdminServiceProvider extends AbstractPackageServiceProvider
     {
         $widgets = [
             DashboardEnum::Main->value => [
+                SiteStatsOverviewFilamentWidget::class,
                 AnalyticsOverviewFilamentWidget::class,
                 AnalyticsTrendFilamentWidget::class,
                 AnalyticsInsightsFilamentWidget::class,
@@ -1157,6 +1174,10 @@ class AdminServiceProvider extends AbstractPackageServiceProvider
         }
 
         $snapshot = resolve(AdminDashboardDataRequestCache::class)->analyticsSnapshot($actor, 'this_week');
+
+        if (! $snapshot->isAvailable()) {
+            return __('capell-admin::dashboard.overview_stat_unavailable');
+        }
 
         if (! $snapshot->collecting) {
             return __('capell-admin::dashboard.overview_stat_collection_disabled');
