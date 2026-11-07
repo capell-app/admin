@@ -24,6 +24,7 @@
                     ])
                     type="button"
                     title="{{ $this->lockdownActive ? __('capell-admin::button.disable_lockdown_tooltip') : __('capell-admin::button.site_tools') }}"
+                    aria-label="{{ $this->lockdownActive ? __('capell-admin::button.disable_lockdown_tooltip') : __('capell-admin::button.site_tools') }}"
                     x-tooltip.raw="{{ $this->lockdownActive ? __('capell-admin::message.lockdown_banner') : __('capell-admin::button.site_tools') }}"
                 >
                     @svg(Heroicon::WrenchScrewdriver->getIconForSize(IconSize::Small), 'h-4 w-4')
@@ -124,6 +125,10 @@
 
                     {{ __('capell-admin::button.rebuild_site') }}
                 </button>
+
+                @if (config('capell.multi_node', false))
+                    <p class="px-3 py-2 text-sm">{{ __('capell-admin::message.lockdown_multi_node_cache_warning') }}</p>
+                @endif
 
                 @if ($this->lockdownActive)
                     <button
