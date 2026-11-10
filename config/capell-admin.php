@@ -164,6 +164,7 @@ return [
     ],
     'navigation_badge_counts' => false,
     'auto_translate_language_text' => env('CAPELL_AUTO_TRANSLATE_LANGUAGE_TEXT', true),
+    'translation_tabs_orientation' => env('CAPELL_TRANSLATION_TABS_ORIENTATION', 'horizontal'),
     'show_configurator_type_hint' => env('CAPELL_SHOW_CONFIGURATOR_TYPE_HINT', false),
 
     'layout_builder' => [
@@ -251,5 +252,10 @@ return [
             'target' => '[data-filament-global-search-field]',
             'label' => 'Focus global search',
         ],
+    ],
+
+    'agent' => [
+        // Admin agent tool invocations allowed per signed-in user per minute.
+        'tool_invocations_per_minute' => (int) env('CAPELL_ADMIN_AGENT_TOOL_INVOCATIONS_PER_MINUTE', 30),
     ],
 ];

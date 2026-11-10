@@ -103,6 +103,7 @@ use Capell\Admin\Filament\Widgets\Dashboard\CapellInfoFilamentWidget;
 use Capell\Admin\Filament\Widgets\Dashboard\ListPagesFilamentWidget;
 use Capell\Admin\Filament\Widgets\Dashboard\NeedsAttentionFilamentWidget;
 use Capell\Admin\Filament\Widgets\Dashboard\RecentActivityFilamentWidget;
+use Capell\Admin\Filament\Widgets\Dashboard\SecurityAttentionFilamentWidget;
 use Capell\Admin\Filament\Widgets\Dashboard\SiteStatsOverviewFilamentWidget;
 use Capell\Admin\Filament\Widgets\Extensions\ExtensionActionsFilamentWidget;
 use Capell\Admin\Filament\Widgets\Extensions\ExtensionDependencyGraphFilamentWidget;
@@ -1209,6 +1210,7 @@ class AdminServiceProvider extends AbstractPackageServiceProvider
     {
         $widgets = [
             DashboardEnum::Main->value => [
+                SecurityAttentionFilamentWidget::class,
                 SiteStatsOverviewFilamentWidget::class,
                 AnalyticsOverviewFilamentWidget::class,
                 AnalyticsTrendFilamentWidget::class,
@@ -1439,8 +1441,14 @@ class AdminServiceProvider extends AbstractPackageServiceProvider
     {
         foreach ([CapellExtension::class, ExtensionHealthAlert::class] as $model) {
             foreach (['saved', 'deleted'] as $event) {
-                $model::registerModelEvent($event, static function (): void {
+                $model::registerModelEvent($event, static function (Model $record): void {
                     resolve(ExtensionNavigationBadgeCounts::class)->forget();
+
+                    if ($record->getConnection()->transactionLevel() > 0) {
+                        $record->getConnection()->afterCommit(static function (): void {
+                            resolve(ExtensionNavigationBadgeCounts::class)->forget();
+                        });
+                    }
                 });
             }
         }
