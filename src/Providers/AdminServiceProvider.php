@@ -38,8 +38,10 @@ use Capell\Admin\Contracts\Dashboard\RecentlyPublishedDataProvider;
 use Capell\Admin\Contracts\Dashboard\SiteStatsDataProvider;
 use Capell\Admin\Contracts\DashboardReports\ActivityTrailQueryProvider;
 use Capell\Admin\Contracts\DashboardSettingsContributor;
+use Capell\Admin\Contracts\Diagnostics\SiteHealthReportExtender;
 use Capell\Admin\Contracts\Diagnostics\SiteHealthWidget;
 use Capell\Admin\Contracts\EnumPresentationContributor;
+use Capell\Admin\Contracts\Extenders\PageAuthoringValidator;
 use Capell\Admin\Contracts\Extenders\PageEditExtender;
 use Capell\Admin\Contracts\Extenders\PageExportExtender;
 use Capell\Admin\Contracts\Extenders\PageTableExtender;
@@ -51,7 +53,6 @@ use Capell\Admin\Contracts\Pages\PageTableStatusResolver;
 use Capell\Admin\Contracts\RegistryInspectorInterface;
 use Capell\Admin\Contracts\Support\FlagIconRenderer as FlagIconRendererContract;
 use Capell\Admin\Data\AdminAssetData;
-use Capell\Admin\Data\AdminHelpEntryData;
 use Capell\Admin\Data\AdminSurfaceContributionData;
 use Capell\Admin\Data\AdminZoneContextData;
 use Capell\Admin\Data\AdminZoneContributionData;
@@ -76,6 +77,7 @@ use Capell\Admin\Filament\Components\Forms\SpatieMediaLibraryFileUpload as Admin
 use Capell\Admin\Filament\Imports\RedirectImporter;
 use Capell\Admin\Filament\Livewire\PageScratchDraftPanel;
 use Capell\Admin\Filament\Livewire\PublishStatusPanel;
+use Capell\Admin\Filament\Pages\CapellDashboard;
 use Capell\Admin\Filament\Pages\Extensions\Tables\ExtensionsTable;
 use Capell\Admin\Filament\Pages\ExtensionsPage;
 use Capell\Admin\Filament\Pages\Reports\AccessibilityReadinessReport;
@@ -100,6 +102,8 @@ use Capell\Admin\Filament\Widgets\Dashboard\AnalyticsRecentActivityFilamentWidge
 use Capell\Admin\Filament\Widgets\Dashboard\AnalyticsTrendFilamentWidget;
 use Capell\Admin\Filament\Widgets\Dashboard\CapellAccountFilamentWidget;
 use Capell\Admin\Filament\Widgets\Dashboard\CapellInfoFilamentWidget;
+use Capell\Admin\Filament\Widgets\Dashboard\FirstRunChecklistFilamentWidget;
+use Capell\Admin\Filament\Widgets\Dashboard\HostLoadAttentionFilamentWidget;
 use Capell\Admin\Filament\Widgets\Dashboard\ListPagesFilamentWidget;
 use Capell\Admin\Filament\Widgets\Dashboard\NeedsAttentionFilamentWidget;
 use Capell\Admin\Filament\Widgets\Dashboard\RecentActivityFilamentWidget;
@@ -119,9 +123,12 @@ use Capell\Admin\Filament\Widgets\MarketingStudio\MarketingStudioLaunchReadiness
 use Capell\Admin\Filament\Widgets\MarketingStudio\MarketingStudioQuickActionsFilamentWidget;
 use Capell\Admin\Filament\Widgets\MarketingStudio\MarketingStudioTimelineFilamentWidget;
 use Capell\Admin\Filament\Widgets\MarketingStudio\MarketingStudioWorkQueueFilamentWidget;
+use Capell\Admin\Http\Middleware\AuthorisePeekPreview;
 use Capell\Admin\Http\Middleware\EnsureInstalledPanelAvailable;
 use Capell\Admin\Listeners\AdminUploadGrantTransactionListener;
+use Capell\Admin\Listeners\GrantPanelAccessToInstallUser;
 use Capell\Admin\Listeners\RememberPageUrlRewriteForPrompt;
+use Capell\Admin\Listeners\RevokePendingInvitation;
 use Capell\Admin\Livewire\Header\AdminTools;
 use Capell\Admin\Livewire\Header\AdminWorkspaceSwitcher;
 use Capell\Admin\Livewire\Header\NavigationTree;
@@ -143,6 +150,7 @@ use Capell\Admin\Observers\PageObserver as AdminPageObserver;
 use Capell\Admin\Policies\ActivityPolicy;
 use Capell\Admin\Policies\BlockTemplatePolicy;
 use Capell\Admin\Policies\BlueprintPolicy;
+use Capell\Admin\Policies\InboundWebhookEventPolicy;
 use Capell\Admin\Policies\LanguagePolicy;
 use Capell\Admin\Policies\LayoutPolicy;
 use Capell\Admin\Policies\MediaPolicy;
@@ -159,7 +167,6 @@ use Capell\Admin\Support\Activity\AdminActivitySettingsReader;
 use Capell\Admin\Support\Activity\EventSourcedActivityRevertHandler;
 use Capell\Admin\Support\AdminEventRegistry;
 use Capell\Admin\Support\AdminEventRouter;
-use Capell\Admin\Support\AdminHelpRegistry;
 use Capell\Admin\Support\AdminResourceResolver;
 use Capell\Admin\Support\AdminRuntimeActivator;
 use Capell\Admin\Support\AdminSurfaceContributionCache;
@@ -195,9 +202,11 @@ use Capell\Admin\Support\DashboardReports\NullActivityTrailQueryProvider;
 use Capell\Admin\Support\Diagnostics\Checks\AdminRouteOwnershipCheck;
 use Capell\Admin\Support\Diagnostics\Checks\AdminUserAccessCheck;
 use Capell\Admin\Support\Diagnostics\ExtensionHealthSiteHealthWidget;
+use Capell\Admin\Support\Diagnostics\HostLoadSiteHealthReportExtender;
 use Capell\Admin\Support\Diagnostics\RegistryInspector;
 use Capell\Admin\Support\Enums\CoreEnumPresentationContributor;
 use Capell\Admin\Support\Enums\EnumPresentationRegistry;
+use Capell\Admin\Support\Extensions\AdminContributionReceiptPreparer;
 use Capell\Admin\Support\Extensions\ExtensionManagementSurfaceRegistry;
 use Capell\Admin\Support\Extensions\ExtensionNavigationBadgeCounts;
 use Capell\Admin\Support\Extensions\ExtensionOperationsRequestCache;
@@ -206,6 +215,7 @@ use Capell\Admin\Support\Extensions\ExtensionsPageActionRegistry;
 use Capell\Admin\Support\Extensions\InRequestExtensionRemovalCoordinator;
 use Capell\Admin\Support\Icons\FlagIconRenderer;
 use Capell\Admin\Support\ImportEntryRegistry;
+use Capell\Admin\Support\Install\AdminInstallState;
 use Capell\Admin\Support\Install\AdminPermissionSynchronizer;
 use Capell\Admin\Support\Install\FilamentAdminPanelUrlResolver;
 use Capell\Admin\Support\InstalledPanelRuntime;
@@ -214,6 +224,7 @@ use Capell\Admin\Support\Interceptors\Blueprints\Pages\HomePageBlueprintIntercep
 use Capell\Admin\Support\Interceptors\Blueprints\Pages\MaintenancePageBlueprintInterceptor;
 use Capell\Admin\Support\Interceptors\Blueprints\Pages\NotFoundPageBlueprintInterceptor;
 use Capell\Admin\Support\Interceptors\Blueprints\Pages\SystemPageBlueprintInterceptor;
+use Capell\Admin\Support\Livewire\ShortCircuitingPersistentMiddleware;
 use Capell\Admin\Support\Makers\AdminBladeComponentMaker;
 use Capell\Admin\Support\Makers\AdminConfiguratorMaker;
 use Capell\Admin\Support\Makers\FilamentWidgetMaker;
@@ -223,17 +234,20 @@ use Capell\Admin\Support\Media\AdminUploadGrantRepository;
 use Capell\Admin\Support\Media\LegacyAwareAdminMediaFieldFactory;
 use Capell\Admin\Support\Media\MediaDuplicateIndex;
 use Capell\Admin\Support\Navigation\AdminNavigationBadgeCountCache;
-use Capell\Admin\Support\Navigation\WorkspaceNavigation;
+use Capell\Admin\Support\Navigation\AdminNavigationOrganiser;
+use Capell\Admin\Support\Navigation\NavigationGroupResolver;
 use Capell\Admin\Support\Notifications\AdminNotificationGroupRegistry;
 use Capell\Admin\Support\Pages\DefaultPageTableStatusResolver;
 use Capell\Admin\Support\Pages\PageUrlRewritePromptState;
 use Capell\Admin\Support\PaletteRequestState;
+use Capell\Admin\Support\Properties\PropertyConstraintPageAuthoringValidator;
 use Capell\Admin\Support\ProvenanceRouteCollection;
 use Capell\Admin\Support\Publish\WorkflowPublishPanelExtender;
 use Capell\Admin\Support\Redirects\RedirectHealthRequestCache;
 use Capell\Admin\Support\Reports\ReportRegistry;
 use Capell\Admin\Support\Routing\AdminFrontendRouteReservationContributor;
 use Capell\Admin\Support\Schemas\AdminSchemaExtensionPipeline;
+use Capell\Admin\Support\Security\ScopedPeekPreviewTokens;
 use Capell\Admin\Support\Subscribers\ActAsOwnerEventSubscriber;
 use Capell\Admin\Support\Subscribers\AdminConfiguratorsSubscriber;
 use Capell\Admin\Support\Themes\ThemeLibraryRuntime;
@@ -251,18 +265,21 @@ use Capell\Core\Contracts\AdminPanelUrlResolver;
 use Capell\Core\Contracts\AdminPermissionSynchronizer as AdminPermissionSynchronizerContract;
 use Capell\Core\Contracts\AdminResourceResolver as AdminResourceResolverContract;
 use Capell\Core\Contracts\DoctorCheck;
+use Capell\Core\Contracts\Extensions\PreparesExtensionContributionReceipts;
 use Capell\Core\Contracts\FrontendRouteReservationContributor;
 use Capell\Core\Contracts\Makers\MakerRegistryInterface;
 use Capell\Core\Contracts\Redirects\RedirectUrlRecorder;
 use Capell\Core\Enums\BlueprintSubjectEnum;
 use Capell\Core\Enums\PageTypeEnum;
 use Capell\Core\Events\InstalledRuntimeRefreshed;
+use Capell\Core\Events\InstallUserCreated;
 use Capell\Core\Events\PageUrlsRewritten;
 use Capell\Core\Facades\CapellCore;
 use Capell\Core\Models\BlockTemplate;
 use Capell\Core\Models\Blueprint;
 use Capell\Core\Models\CapellExtension;
 use Capell\Core\Models\ExtensionHealthAlert;
+use Capell\Core\Models\InboundWebhookEvent;
 use Capell\Core\Models\Language;
 use Capell\Core\Models\Layout;
 use Capell\Core\Models\Media;
@@ -279,12 +296,12 @@ use Capell\Core\Support\Extensions\ExtensionOrderingAudit;
 use Capell\Core\Support\Extensions\ExtensionPosition;
 use Capell\Core\Support\Packages\AbstractPackageServiceProvider;
 use Capell\Core\Support\Packages\InstalledRuntimeLifecycle;
+use Capell\Core\Support\Packages\PackageSurfaceRegistrar;
 use Capell\Core\Support\Permissions\SiteAccess;
 use Capell\Core\Support\Redirects\PageUrlRedirectUrlRecorder;
 use Capell\Core\Support\Settings\SettingsGroupMetadata;
 use Capell\Core\ThemeStudio\Settings\ThemeStudioSettings;
 use Closure;
-use CmsMulti\FilamentClearCache\Facades\FilamentClearCache;
 use Filament\Actions\Action;
 use Filament\Actions\ImportAction;
 use Filament\Facades\Filament;
@@ -306,6 +323,8 @@ use Filament\Support\Facades\FilamentAsset;
 use Filament\Support\Icons\Heroicon;
 use Filament\Support\Livewire\Partials\DataStoreOverride;
 use Filament\Tables\Columns\Column;
+use Illuminate\Auth\Events\Login;
+use Illuminate\Auth\Events\PasswordReset;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Contracts\Auth\Authenticatable;
 use Illuminate\Contracts\Events\Dispatcher;
@@ -317,6 +336,7 @@ use Illuminate\Database\Events\TransactionCommitted;
 use Illuminate\Database\Events\TransactionRolledBack;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Foundation\Application;
+use Illuminate\Http\Request;
 use Illuminate\Routing\Events\RouteMatched;
 use Illuminate\Routing\Router;
 use Illuminate\Support\Facades\Event;
@@ -331,10 +351,13 @@ use Livewire\Livewire;
 use Livewire\Mechanisms\DataStore;
 use Livewire\Mechanisms\HandleComponents\ComponentContext;
 use Livewire\Mechanisms\HandleRequests\HandleRequests;
+use Livewire\Mechanisms\PersistentMiddleware\PersistentMiddleware;
 
 use function Livewire\on;
 
+use LogicException;
 use Override;
+use Pboivin\FilamentPeek\Support\Cache as PeekPreviewTokens;
 use ReflectionClass;
 use RuntimeException;
 use Spatie\Activitylog\Models\Activity;
@@ -389,6 +412,19 @@ class AdminServiceProvider extends AbstractPackageServiceProvider
     }
 
     #[Override]
+    public function packageRegistered(): void
+    {
+        // Livewire's listeners capture the mechanism when the application boots, so a
+        // late registration would leave updates unguarded. Checked here, after the
+        // bindings are made, so re-running registeringPackage() on a booted app stays valid.
+        throw_if(
+            $this->app->isBooted() && ! $this->lateRegistrationIsInstallingPackages(),
+            LogicException::class,
+            'The admin package must be registered before the application boots so Livewire updates honour middleware responses.',
+        );
+    }
+
+    #[Override]
     public function registeringPackage(): void
     {
         // Filament builds panels while its routes boot, before this provider's
@@ -411,6 +447,7 @@ class AdminServiceProvider extends AbstractPackageServiceProvider
         $this->app->bindIf(SpatieMediaLibraryFileUpload::class, AdminSpatieMediaLibraryFileUpload::class);
 
         $this->registerAdminEventSystem();
+        $this->registerShortCircuitingPersistentMiddleware();
 
         $this->app->scoped(PaletteRequestState::class);
         $this->app->scoped(AdminUploadGrantRepository::class);
@@ -440,6 +477,7 @@ class AdminServiceProvider extends AbstractPackageServiceProvider
         $this->app->bind(AdminPanelUrlResolver::class, FilamentAdminPanelUrlResolver::class);
         $this->app->tag([AdminUserAccessCheck::class, AdminRouteOwnershipCheck::class], DoctorCheck::TAG);
         $this->app->singleton(InstalledPanelRuntime::class);
+        $this->securePeekPreviews();
         // Each route records who serves it as it is registered, before any route is cached.
         ProvenanceRouteCollection::install($this->app->make(Router::class));
 
@@ -550,118 +588,15 @@ class AdminServiceProvider extends AbstractPackageServiceProvider
         $this->app->singleton(AdminPermissionSynchronizerContract::class, AdminPermissionSynchronizer::class);
         $this->app->singleton(AdminSchemaExtensionPipeline::class);
         $this->app->singleton(ImportEntryRegistry::class);
-        $this->app->scoped(AdminHelpRegistry::class, function (): AdminHelpRegistry {
-            $registry = new AdminHelpRegistry;
-            $registry->register('filament.admin.resources.pages.index', new AdminHelpEntryData(
-                (string) __('capell-admin::help.pages.title'),
-                (string) __('capell-admin::help.pages.summary'),
-                (string) __('capell-admin::help.pages.next'),
-            ));
-            $registry->register('filament.admin.resources.pages.edit', new AdminHelpEntryData(
-                (string) __('capell-admin::help.page_edit.title'),
-                (string) __('capell-admin::help.page_edit.summary'),
-                (string) __('capell-admin::help.page_edit.next'),
-            ));
-            $registry->register('filament.admin.resources.media.index', new AdminHelpEntryData(
-                (string) __('capell-admin::help.media.title'),
-                (string) __('capell-admin::help.media.summary'),
-                (string) __('capell-admin::help.media.next'),
-            ));
-            $registry->register('filament.admin.resources.sites.index', new AdminHelpEntryData(
-                (string) __('capell-admin::help.sites.title'),
-                (string) __('capell-admin::help.sites.summary'),
-                (string) __('capell-admin::help.sites.next'),
-            ));
-            $registry->register('filament.admin.resources.layouts.index', new AdminHelpEntryData(
-                (string) __('capell-admin::help.layouts.title'),
-                (string) __('capell-admin::help.layouts.summary'),
-                (string) __('capell-admin::help.layouts.next'),
-            ));
-            $registry->register('filament.admin.resources.themes.index', new AdminHelpEntryData(
-                (string) __('capell-admin::help.themes.title'),
-                (string) __('capell-admin::help.themes.summary'),
-                (string) __('capell-admin::help.themes.next'),
-            ));
-            $registry->register('filament.admin.resources.blueprints.index', new AdminHelpEntryData(
-                (string) __('capell-admin::help.blueprints.title'),
-                (string) __('capell-admin::help.blueprints.summary'),
-                (string) __('capell-admin::help.blueprints.next'),
-            ));
-            $registry->register('filament.admin.resources.users.index', new AdminHelpEntryData(
-                (string) __('capell-admin::help.users.title'),
-                (string) __('capell-admin::help.users.summary'),
-                (string) __('capell-admin::help.users.next'),
-            ));
-            $registry->register('filament.admin.resources.shield.roles.index', new AdminHelpEntryData(
-                (string) __('capell-admin::help.roles.title'),
-                (string) __('capell-admin::help.roles.summary'),
-                (string) __('capell-admin::help.roles.next'),
-            ));
-            $registry->register('filament.admin.pages.settings', new AdminHelpEntryData(
-                (string) __('capell-admin::help.settings.title'),
-                (string) __('capell-admin::help.settings.summary'),
-                (string) __('capell-admin::help.settings.next'),
-            ));
-            $registry->register('filament.admin.pages.extensions', new AdminHelpEntryData(
-                (string) __('capell-admin::help.extensions.title'),
-                (string) __('capell-admin::help.extensions.summary'),
-                (string) __('capell-admin::help.extensions.next'),
-            ));
-            $registry->register('filament.admin.resources.redirects.index', new AdminHelpEntryData(
-                (string) __('capell-admin::help.redirects.title'),
-                (string) __('capell-admin::help.redirects.summary'),
-                (string) __('capell-admin::help.redirects.next'),
-            ));
-            $registry->register('filament.admin.pages.sitemap', new AdminHelpEntryData(
-                (string) __('capell-admin::help.sitemap.title'),
-                (string) __('capell-admin::help.sitemap.summary'),
-                (string) __('capell-admin::help.sitemap.next'),
-            ));
-            $registry->register('filament.admin.pages.site-health', new AdminHelpEntryData(
-                (string) __('capell-admin::help.site_health.title'),
-                (string) __('capell-admin::help.site_health.summary'),
-                (string) __('capell-admin::help.site_health.next'),
-            ));
-            $registry->register('filament.admin.resources.languages.index', new AdminHelpEntryData(
-                (string) __('capell-admin::help.languages.title'),
-                (string) __('capell-admin::help.languages.summary'),
-                (string) __('capell-admin::help.languages.next'),
-            ));
-            $registry->register('filament.admin.resources.activities.index', new AdminHelpEntryData(
-                (string) __('capell-admin::help.activity.title'),
-                (string) __('capell-admin::help.activity.summary'),
-                (string) __('capell-admin::help.activity.next'),
-            ));
-            $registry->register('filament.admin.pages.recently-deleted', new AdminHelpEntryData(
-                (string) __('capell-admin::help.recently_deleted.title'),
-                (string) __('capell-admin::help.recently_deleted.summary'),
-                (string) __('capell-admin::help.recently_deleted.next'),
-            ));
-            $registry->register('filament.admin.pages.analytics-dashboard', new AdminHelpEntryData(
-                (string) __('capell-admin::help.analytics.title'),
-                (string) __('capell-admin::help.analytics.summary'),
-                (string) __('capell-admin::help.analytics.next'),
-            ));
-            $registry->register('filament.admin.pages.upgrade', new AdminHelpEntryData(
-                (string) __('capell-admin::help.upgrade.title'),
-                (string) __('capell-admin::help.upgrade.summary'),
-                (string) __('capell-admin::help.upgrade.next'),
-            ));
-            $registry->register('filament.admin.pages.capell-dashboard', new AdminHelpEntryData(
-                (string) __('capell-admin::help.dashboard.title'),
-                (string) __('capell-admin::help.dashboard.summary'),
-                (string) __('capell-admin::help.dashboard.next'),
-            ));
-
-            return $registry;
-        });
 
         $this->app->tag([], PageTableExtender::TAG);
         $this->app->tag([], PageEditExtender::TAG);
         $this->app->tag([], PageExportExtender::TAG);
+        $this->app->tag([PropertyConstraintPageAuthoringValidator::class], PageAuthoringValidator::TAG);
 
         $this->app->tag([AdminDashboardSettingsContributor::class], DashboardSettingsContributor::TAG);
         $this->app->tag([ExtensionHealthSiteHealthWidget::class], SiteHealthWidget::TAG);
+        $this->app->tag([HostLoadSiteHealthReportExtender::class], SiteHealthReportExtender::TAG);
 
         $this->app->singletonIf(ContentHealthDataProvider::class, NullContentHealthDataProvider::class);
         $this->app->singletonIf(DashboardAnalyticsDataProvider::class, DefaultDashboardAnalyticsDataProvider::class);
@@ -689,7 +624,8 @@ class AdminServiceProvider extends AbstractPackageServiceProvider
         // can replace it. Admin never names the replacement; the bridge does.
         $this->app->bind(ExtensionRemovalCoordinator::class, InRequestExtensionRemovalCoordinator::class);
         $this->app->scoped(AdminNavigationBadgeCountCache::class);
-        $this->app->scoped(WorkspaceNavigation::class);
+        $this->app->scoped(NavigationGroupResolver::class);
+        $this->app->scoped(AdminNavigationOrganiser::class);
         $this->app->scoped(RedirectHealthRequestCache::class);
         $this->app->scoped(ThemeLibraryRuntime::class);
         $this->app->scoped(MediaDuplicateIndex::class);
@@ -717,6 +653,8 @@ class AdminServiceProvider extends AbstractPackageServiceProvider
         });
 
         $this->registerNotificationGroups();
+
+        $this->app->tag([AdminContributionReceiptPreparer::class], PreparesExtensionContributionReceipts::TAG);
 
         $this->app->singleton(
             AdminRuntimeActivator::class,
@@ -851,8 +789,6 @@ class AdminServiceProvider extends AbstractPackageServiceProvider
     #[Override]
     protected function bootInstalledPackage(): self
     {
-        FilamentClearCache::addCommand('capell:admin-clear-cache');
-
         return $this
             ->registerAboutInfo()
             ->registerWidgetComponents()
@@ -863,6 +799,8 @@ class AdminServiceProvider extends AbstractPackageServiceProvider
             ->registerSubscribers()
             ->registerModelInterceptors()
             ->registerPageUrlRewritePrompt()
+            ->registerInvitationRevocation()
+            ->registerInstallUserPanelAccess()
             ->registerExtensionNavigationBadgeInvalidation()
             ->registerActAsOwnerAuditing()
             ->registerEventSourcingBridges()
@@ -899,6 +837,97 @@ class AdminServiceProvider extends AbstractPackageServiceProvider
             'skip-permission-sync',
             'force',
         ];
+    }
+
+    /**
+     * The package installer registers a newly installed package's providers in its already-booted process
+     * (console, queue worker, or the installer's own step request). That process serves no Livewire
+     * update, and the next request boots with the admin package registered in time. Under Octane the
+     * worker keeps this booted application for later requests, whose Livewire updates would reach the
+     * mechanism captured before the late registration, so it is refused there. Anything that may be a
+     * Livewire update, or any doubt, keeps the late registration refused.
+     */
+    private function lateRegistrationIsInstallingPackages(): bool
+    {
+        if ($this->runningUnderOctane()) {
+            return false;
+        }
+
+        if (! $this->app->resolved(PackageSurfaceRegistrar::class)
+            || ! $this->app->make(PackageSurfaceRegistrar::class)->isInstallingPackages()) {
+            return false;
+        }
+
+        return ! $this->mayBeServingLivewireUpdate();
+    }
+
+    /**
+     * Octane's start commands give every worker process LARAVEL_OCTANE=1. The 'octane' binding is not used:
+     * it exists wherever the package is installed, including the console and queue processes that install.
+     */
+    private function runningUnderOctane(): bool
+    {
+        return filter_var(getenv('LARAVEL_OCTANE'), FILTER_VALIDATE_BOOLEAN);
+    }
+
+    private function mayBeServingLivewireUpdate(): bool
+    {
+        if (! $this->app->bound('request')) {
+            return true;
+        }
+
+        try {
+            $request = $this->app->make('request');
+
+            if (! $request instanceof Request) {
+                return true;
+            }
+
+            if ($request->hasHeader('X-Livewire')) {
+                return true;
+            }
+
+            $updatePath = trim((string) parse_url((string) Livewire::getUpdateUri(), PHP_URL_PATH), '/');
+
+            return $updatePath === '' || $request->is($updatePath);
+        } catch (Throwable) {
+            return true;
+        }
+    }
+
+    /**
+     * Livewire replays persistent middleware through a mechanism resolved from the container.
+     * Extending the binding covers both provider orders: before Livewire registers, the
+     * extender wraps its resolution; after, it swaps the registered instance before any
+     * mechanism boots. Once the application has booted, Livewire's listeners already hold
+     * the original, so a late registration fails instead of leaving updates unguarded.
+     */
+    private function registerShortCircuitingPersistentMiddleware(): void
+    {
+        $this->app->extend(
+            PersistentMiddleware::class,
+            static fn (PersistentMiddleware $mechanism): PersistentMiddleware => $mechanism instanceof ShortCircuitingPersistentMiddleware
+                ? $mechanism
+                : new ShortCircuitingPersistentMiddleware,
+        );
+    }
+
+    /**
+     * Filament Peek names a user's previews with one token derived from their identifier, which never expires
+     * and opens every later preview of theirs to anyone holding it. Each preview gets its own grant instead,
+     * and the preview URL is opened only for the user and panel it was granted to.
+     */
+    private function securePeekPreviews(): void
+    {
+        $this->app->bind(PeekPreviewTokens::class, ScopedPeekPreviewTokens::class);
+
+        // After every provider has merged its configuration, before Peek loads its preview route.
+        $this->app->booting(static function (): void {
+            config()->set(
+                'filament-peek.internalPreviewUrl.middleware',
+                AuthorisePeekPreview::around(config('filament-peek.internalPreviewUrl.middleware', ['web'])),
+            );
+        });
     }
 
     private function prepareAdminRuntime(): self
@@ -1211,6 +1240,7 @@ class AdminServiceProvider extends AbstractPackageServiceProvider
         $widgets = [
             DashboardEnum::Main->value => [
                 SecurityAttentionFilamentWidget::class,
+                HostLoadAttentionFilamentWidget::class,
                 SiteStatsOverviewFilamentWidget::class,
                 AnalyticsOverviewFilamentWidget::class,
                 AnalyticsTrendFilamentWidget::class,
@@ -1218,6 +1248,7 @@ class AdminServiceProvider extends AbstractPackageServiceProvider
                 AnalyticsRecentActivityFilamentWidget::class,
                 CapellAccountFilamentWidget::class,
                 CapellInfoFilamentWidget::class,
+                FirstRunChecklistFilamentWidget::class,
                 NeedsAttentionFilamentWidget::class,
                 ListPagesFilamentWidget::class,
                 RecentActivityFilamentWidget::class,
@@ -1253,6 +1284,18 @@ class AdminServiceProvider extends AbstractPackageServiceProvider
         CapellAdmin::registerDashboardPanel(DashboardRegionEnum::Insights, AnalyticsInsightsFilamentWidget::class, DashboardEnum::Main);
         CapellAdmin::registerDashboardPanel(DashboardRegionEnum::Activity, AnalyticsRecentActivityFilamentWidget::class, DashboardEnum::Main);
         CapellAdmin::registerDashboardPanel(DashboardRegionEnum::Activity, RecentActivityFilamentWidget::class, DashboardEnum::Main);
+
+        // Where a person finds the getting-started list again after hiding it.
+        CapellAdmin::registerUserMenuItem(
+            key: 'first-run-checklist',
+            label: static fn (): string => (string) __('capell-admin::dashboard.first_run_help_menu_item'),
+            icon: Heroicon::OutlinedQuestionMarkCircle,
+            url: static fn (): string => CapellDashboard::getUrl([CapellDashboard::SHOW_FIRST_RUN_CHECKLIST_QUERY => '1']),
+            visible: static fn (): bool => resolve(AdminInstallState::class)->installed()
+                && FirstRunChecklistFilamentWidget::canBeRestored(),
+            sort: 900,
+            group: 'help',
+        );
 
         return $this;
     }
@@ -1395,6 +1438,7 @@ class AdminServiceProvider extends AbstractPackageServiceProvider
             Site::class => SitePolicy::class,
             Blueprint::class => BlueprintPolicy::class,
             Language::class => LanguagePolicy::class,
+            InboundWebhookEvent::class => InboundWebhookEventPolicy::class,
             Theme::class => ThemePolicy::class,
             SiteDomain::class => SiteDomainPolicy::class,
         ];
@@ -1459,6 +1503,28 @@ class AdminServiceProvider extends AbstractPackageServiceProvider
     private function registerPageUrlRewritePrompt(): self
     {
         Event::listen(PageUrlsRewritten::class, [RememberPageUrlRewriteForPrompt::class, 'handle']);
+
+        return $this;
+    }
+
+    private function registerInstallUserPanelAccess(): self
+    {
+        Event::listen(InstallUserCreated::class, [GrantPanelAccessToInstallUser::class, 'handle']);
+
+        return $this;
+    }
+
+    private function registerInvitationRevocation(): self
+    {
+        Event::listen(Login::class, [RevokePendingInvitation::class, 'handleLogin']);
+        Event::listen(PasswordReset::class, [RevokePendingInvitation::class, 'handlePasswordReset']);
+
+        // Scoped to the user model's updates; an insert never revokes.
+        $userModel = config('auth.providers.users.model');
+
+        if (is_string($userModel) && $userModel !== '') {
+            Event::listen('eloquent.updated: ' . $userModel, [RevokePendingInvitation::class, 'handleUpdated']);
+        }
 
         return $this;
     }
@@ -1568,7 +1634,7 @@ class AdminServiceProvider extends AbstractPackageServiceProvider
                 group: $group,
                 label: $settings['label'],
                 icon: $settings['icon'],
-                navigationGroup: 'capell-admin::navigation.group_settings',
+                navigationGroup: 'settings',
                 navigationSort: $settings['sort'],
                 packageName: $settings['package'],
             ));

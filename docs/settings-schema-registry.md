@@ -8,7 +8,7 @@ The Settings Schema Registry is a runtime registry of settings form-builder. The
 
 1. **SettingsSchemaRegistry** (`Capell\Core\Support\Settings\SettingsSchemaRegistry`)
     - Central registry maintaining all settings schemas
-    - Organizes schemas by group (e.g., 'core', 'admin', 'frontend')
+    - Organises schemas by group (e.g., 'core', 'admin', 'frontend')
     - Supports multiple schemas per group (composable)
     - Stores optional metadata for package-owned settings surfaces
 
@@ -48,7 +48,7 @@ private function registerSettingsSchemas(): self
         group: 'yourgroup',
         label: 'your-package::settings.title',
         icon: Heroicon::OutlinedCog6Tooth,
-        navigationGroup: 'capell-admin::navigation.group_system',
+        navigationGroup: 'settings',
         packageName: 'capell-app/your-package',
     ));
 
@@ -523,22 +523,22 @@ it('registers schema in registry')
 
 ## Best Practices
 
-### 1. Use Descriptive Group Names
+### Use Descriptive Group Names
 
 Choose clear, unique group names:
 
 - ✅ `'yourpackage'`, `'ai-orchestrator'`, `'ecommerce'`
 - ❌ `'settings'`, `'config'`, `'options'`
 
-### 2. Register Schemas in Boot
+### Register Schemas in Boot
 
 Always register schemas in `bootInstalledPackage()` or similar boot methods, not in `register()`.
 
-### 3. One Settings Class Per Group
+### One Settings Class Per Group
 
 Each group should have exactly one settings class (for form hydration/saving), but can have multiple schema classes (for form building).
 
-### 4. Explicit Keys for Important Schemas
+### Explicit Keys for Important Schemas
 
 When registering schemas that others might intentionally replace, use explicit keys:
 
@@ -546,11 +546,11 @@ When registering schemas that others might intentionally replace, use explicit k
 $this->surface()->settingsSchema('admin', ImportantSchema::class, 'important_feature');
 ```
 
-### 5. Document Extension Points
+### Document Extension Points
 
 If your package allows schema extensions, document which groups and keys are available for keyed contributions.
 
-### 6. Validate Schema Classes
+### Validate Schema Classes
 
 The registry validates that all schemas implement `HasSchema`. Ensure your schemas are properly typed:
 

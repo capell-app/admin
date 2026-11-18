@@ -266,7 +266,7 @@ it('refreshes and explains when another editor removed the displayed recovery', 
         ->assertNotDispatched('page-scratch-draft-restored')
         ->assertNotified(__('capell-admin::scratch_drafts.recovery_changed'))
         ->assertDontSee('Restore changes')
-        ->assertDontSee('Discard recovery');
+        ->assertDontSee(__('capell-admin::scratch_drafts.discard'));
 })->with(['restore', 'discard']);
 
 it('keeps separate recoveries for two editor sessions and ignores expired snapshots', function (): void {
@@ -365,6 +365,11 @@ it('sends the acknowledged form data with the editor saved event', function (): 
 });
 
 it('acknowledges the form when Filament mounts the save-as-draft action', function (): void {
+    app()->instance('capell.workspace.page-draft-handler', new class
+    {
+        public function saveAsDraft(EditPage $page): void {}
+    });
+
     $page = Page::factory()->withTranslations()->createOne(['visible_from' => PagePublishSentinel::draftValue()]);
     Livewire::test(EditPage::class, ['record' => $page->getRouteKey()])
         ->set('data.name', 'Draft acknowledgement')

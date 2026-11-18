@@ -7,11 +7,13 @@ namespace Capell\Admin\Enums;
 use Capell\Admin\Filament\Pages\AnalyticsDashboard;
 use Capell\Admin\Filament\Pages\DashboardToolsPage;
 use Capell\Admin\Filament\Pages\ExtensionsPage;
+use Capell\Admin\Filament\Pages\GuidedSetup;
 use Capell\Admin\Filament\Pages\SecurityPage;
 use Capell\Admin\Filament\Pages\SettingsPage;
 use Capell\Admin\Filament\Pages\SiteAdminMetricsPage;
 use Capell\Admin\Filament\Pages\SiteHealthPage;
 use Capell\Admin\Filament\Pages\SitemapPage;
+use Capell\Admin\Filament\Pages\TranslationBoardPage;
 use Capell\Admin\Filament\Pages\UpgradePage;
 
 enum PageEnum: string
@@ -22,6 +24,8 @@ enum PageEnum: string
 
     case Extension = ExtensionsPage::class;
 
+    case GuidedSetup = GuidedSetup::class;
+
     case Security = SecurityPage::class;
 
     case SiteHealth = SiteHealthPage::class;
@@ -31,6 +35,8 @@ enum PageEnum: string
     case SettingsPage = SettingsPage::class;
 
     case SitemapPage = SitemapPage::class;
+
+    case TranslationBoard = TranslationBoardPage::class;
 
     case UpgradePage = UpgradePage::class;
 

@@ -26,16 +26,20 @@ use Capell\Admin\Filament\Resources\Themes\Tables\ThemesTable;
 use Capell\Admin\Filament\Resources\Themes\ThemeResource;
 use Capell\Admin\Support\AdminSurfaceLookup;
 use Capell\Core\Contracts\Pageable;
+use Capell\Core\Data\Database\SqlFragment;
 use Capell\Core\Data\Media\ExternalVideoData;
 use Capell\Core\Enums\UrlTypeEnum;
 use Capell\Core\Models\AssetAttachment;
 use Capell\Core\Models\Blueprint;
 use Capell\Core\Models\Language;
 use Capell\Core\Models\Media;
+use Capell\Core\Models\PagePropertyValue;
 use Capell\Core\Models\PageUrl;
+use Capell\Core\Models\TermPropertyValue;
 use Capell\Core\Models\Theme;
 use Capell\Core\Support\Media\YouTubeVideoUrl;
 use Capell\Core\Support\Permissions\SiteAccess;
+use Capell\Core\Support\Properties\PropertyMediaUsage;
 use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
 use Filament\Notifications\Notification;
@@ -290,7 +294,7 @@ class MediaTable implements TableConfigurator
                 ->label(__('capell-admin::table.collection'))
                 ->sortable()
                 ->searchable()
-                ->toggleable(),
+                ->toggleable(isToggledHiddenByDefault: true),
             TextColumn::make('disk')
                 ->label(__('capell-admin::table.storage_disk'))
                 ->sortable()
@@ -299,7 +303,7 @@ class MediaTable implements TableConfigurator
                 ->label(__('capell-admin::table.file_type'))
                 ->sortable()
                 ->searchable()
-                ->toggleable(),
+                ->toggleable(isToggledHiddenByDefault: true),
             TextColumn::make('size')
                 ->label(__('capell-admin::table.size'))
                 ->alignRight()
@@ -310,13 +314,11 @@ class MediaTable implements TableConfigurator
             TextColumn::make('model_type')
                 ->label(__('capell-admin::table.type'))
                 ->formatStateUsing(fn (?string $state): ?string => $state !== null ? Str::of(class_basename($state))->headline()->toString() : null)
-                ->toggleable(isToggledHiddenByDefault: true)
-                ->toggleable(),
+                ->toggleable(isToggledHiddenByDefault: true),
             TextColumn::make('model_id')
                 ->label(__('capell-admin::table.record'))
                 ->toggleable(isToggledHiddenByDefault: true)
-                ->alignCenter()
-                ->toggleable(),
+                ->alignCenter(),
             TextColumn::make('owner_label')
                 ->label(__('capell-admin::table.owner'))
                 ->getStateUsing(fn (Media $record): ?string => self::getOwnerLabel($record))
@@ -438,7 +440,13 @@ class MediaTable implements TableConfigurator
      */
     protected static function whereTrackedUsageExists(Builder $query): Builder
     {
-        return $query->whereExists(self::trackedUsageSubquery($query));
+        $subqueries = self::trackedUsageExistenceSubqueries($query);
+
+        return $query->where(function (Builder $used) use ($subqueries): void {
+            foreach ($subqueries as $subquery) {
+                $used->orWhereExists($subquery);
+            }
+        });
     }
 
     /**
@@ -447,7 +455,11 @@ class MediaTable implements TableConfigurator
      */
     protected static function whereTrackedUsageDoesNotExist(Builder $query): Builder
     {
-        return $query->whereNotExists(self::trackedUsageSubquery($query));
+        foreach (self::trackedUsageExistenceSubqueries($query) as $subquery) {
+            $query->whereNotExists($subquery);
+        }
+
+        return $query;
     }
 
     /**
@@ -458,9 +470,40 @@ class MediaTable implements TableConfigurator
     {
         $media = $query->getModel();
 
-        return $query
-            ->select($media->qualifyColumn('*'))
-            ->selectSub(self::trackedUsageCountSubquery($query), 'tracked_usage_count');
+        $counts = [self::trackedUsageCountSubquery($query), ...PropertyMediaUsage::correlatedCounts(
+            $query,
+            SiteAccess::current()->query(PagePropertyValue::class),
+            SiteAccess::current()->query(TermPropertyValue::class),
+        )];
+
+        $expression = implode(' + ', array_map(
+            static fn (QueryBuilder $count): string => 'COALESCE((' . $count->toSql() . '), 0)',
+            $counts,
+        ));
+
+        $query->select($media->qualifyColumn('*'));
+
+        new SqlFragment(
+            '(' . $expression . ') as ' . $query->getQuery()->getGrammar()->wrap('tracked_usage_count'),
+            array_values(array_merge(...array_map(static fn (QueryBuilder $count): array => $count->getBindings(), $counts))),
+        )->applySelect($query->getQuery());
+
+        return $query;
+    }
+
+    /**
+     * Asset attachments plus pages and terms whose property values use the media item.
+     *
+     * @param  Builder<Media>  $query
+     * @return list<QueryBuilder>
+     */
+    protected static function trackedUsageExistenceSubqueries(Builder $query): array
+    {
+        return [self::trackedUsageSubquery($query), ...PropertyMediaUsage::correlatedExistence(
+            $query,
+            SiteAccess::current()->query(PagePropertyValue::class),
+            SiteAccess::current()->query(TermPropertyValue::class),
+        )];
     }
 
     /**

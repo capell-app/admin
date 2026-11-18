@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Capell\Admin\Filament\Resources\Pages\Pages;
 
+use Capell\Admin\Actions\EditorImpact\BuildRecordImpactPreviewAction;
 use Capell\Admin\Actions\MutateContentPresenterAction;
 use Capell\Admin\Actions\Pages\BuildPageEditorSessionAction;
 use Capell\Admin\Actions\Pages\BuildPageRelationshipCountsAction;
@@ -50,6 +51,7 @@ use Capell\Admin\Filament\Concerns\Validate\PageValidation;
 use Capell\Admin\Filament\Contracts\HasPageResource;
 use Capell\Admin\Filament\Contracts\ValidatesDelete;
 use Capell\Admin\Filament\Resources\Pages\Actions\PreviewDraftPageHeaderAction;
+use Capell\Admin\Filament\Resources\Pages\Actions\ReviewAiContentHeaderAction;
 use Capell\Admin\Filament\Resources\Pages\Actions\RevisionsHeaderAction;
 use Capell\Admin\Filament\Resources\Pages\PageResource;
 use Capell\Admin\Filament\Resources\Pages\RelationManagers\UrlsRelationManager;
@@ -80,8 +82,12 @@ use Filament\Resources\Pages\EditRecord;
 use Filament\Resources\RelationManagers\RelationGroup;
 use Filament\Resources\RelationManagers\RelationManager;
 use Filament\Resources\RelationManagers\RelationManagerConfiguration;
+use Filament\Schemas\Components\Component;
+use Filament\Schemas\Components\Group;
+use Filament\Schemas\Components\Text;
 use Filament\Schemas\Components\View;
 use Filament\Schemas\Schema;
+use Filament\Support\Enums\TextSize;
 use Illuminate\Contracts\Auth\Authenticatable;
 use Illuminate\Contracts\Database\Eloquent\Builder as BuilderContract;
 use Illuminate\Contracts\Support\Htmlable;
@@ -117,7 +123,7 @@ class EditPage extends EditRecord implements HasPageResource, ValidatesDelete
     use PageValidation;
     use RestoresRecoveredFormState;
 
-    public static bool $formActionsAreSticky = true;
+    public static bool $formActionsAreSticky = false;
 
     /** @var array<int, string> */
     #[Locked]
@@ -132,8 +138,6 @@ class EditPage extends EditRecord implements HasPageResource, ValidatesDelete
 
     #[Locked]
     public ?string $scratchDraftRevision = null;
-
-    protected bool $savingAsDraft = false;
 
     /** @var list<string> */
     protected $listeners = [
@@ -162,6 +166,8 @@ class EditPage extends EditRecord implements HasPageResource, ValidatesDelete
     #[Override]
     public function hydrate(): void
     {
+        parent::hydrate();
+
         if ($this->scratchDraftContext === '') {
             $this->scratchDraftContext = 'page-editor:' . Str::uuid();
         }
@@ -379,11 +385,11 @@ class EditPage extends EditRecord implements HasPageResource, ValidatesDelete
 
         // The loop above writes persisted, list-keyed content straight into the
         // state, so the editor would hold block `0` with stored (unformatted)
-        // field values. Rebuild the form for the new structure, then fill it:
-        // that runs the same hydration as a fresh mount, so builder items are
-        // keyed by uuid and field formatters run.
-        unset($this->cachedSchemas['form']);
-        $this->getSchema('form')?->fill($this->data);
+        // field values. Rebuild the form for the new structure and hydrate only
+        // the content paths, as a fresh mount would (uuid-keyed builder items,
+        // field formatters run). A full fill() would reload the translations
+        // from the database and discard the editor's unsaved edits.
+        $this->restoreRecoveredFormState($this->data ?? []);
     }
 
     public function saveAsDraft(): void
@@ -404,13 +410,7 @@ class EditPage extends EditRecord implements HasPageResource, ValidatesDelete
             return;
         }
 
-        $this->savingAsDraft = true;
-
-        try {
-            $this->save(shouldRedirect: false);
-        } finally {
-            $this->savingAsDraft = false;
-        }
+        $this->save(shouldRedirect: false);
     }
 
     /**
@@ -576,6 +576,17 @@ class EditPage extends EditRecord implements HasPageResource, ValidatesDelete
     }
 
     #[Override]
+    public function getFormActionsContentComponent(): Component
+    {
+        return Group::make([
+            Text::make(__('capell-admin::scratch_drafts.none'))
+                ->color('gray')
+                ->size(TextSize::ExtraSmall),
+            parent::getFormActionsContentComponent(),
+        ])->key('form-actions-with-recovery-note');
+    }
+
+    #[Override]
     protected function getSavedNotification(): ?Notification
     {
         $notification = parent::getSavedNotification();
@@ -649,13 +660,6 @@ class EditPage extends EditRecord implements HasPageResource, ValidatesDelete
 
         unset($data['translations']);
 
-        // When "Save and Publish" is clicked on a pending (draft) page, clear the
-        // far-future visible_from sentinel so the page becomes live immediately.
-        // Skip this when saveAsDraft() is the caller — that path preserves draft state.
-        if ($this->record->isPending() && ! $this->savingAsDraft) {
-            $data['visible_from'] = null;
-        }
-
         return $data;
     }
 
@@ -710,36 +714,30 @@ class EditPage extends EditRecord implements HasPageResource, ValidatesDelete
             ...$topLevelExtenderActions,
             ...$pipeline->pagePreviewActions(),
             PreviewDraftPageHeaderAction::make(),
-            Action::make('impact-preview')
-                ->label(__('capell-admin::impact.heading'))
-                ->modalDescription(__('capell-admin::impact.description'))
-                ->modalContent(function (): ViewContract {
-                    /** @var view-string $view */
-                    $view = 'capell-admin::filament.forms.record-impact-preview';
-
-                    return view($view, ['record' => $this->record]);
-                })
-                ->modalSubmitAction(false)
-                ->visible(fn (): bool => Gate::allows('update', $this->record)),
+            ReviewAiContentHeaderAction::make(),
             $this->takeOverContentLockAction(),
             RestorePageAction::make()
                 ->icon('heroicon-m-arrow-uturn-left'),
-            $this->deletePageAction(),
-            ForceDeleteAction::make()
-                ->icon('heroicon-m-trash'),
-            ActionGroup::make(array_values(array_filter([
-                $sitemapAction,
-                CreatePageAction::make()
-                    ->redirectAfterCreate(),
-                ReplicatePageAction::make(),
-                RevisionsHeaderAction::make(),
-            ])))
-                ->dropdownPlacement('bottom-end'),
             ActionGroup::make([
-                FrontendResourceDiagnosticsHeaderAction::make(),
-                FrontendSourceMapHeaderAction::make(),
+                ActionGroup::make(array_values(array_filter([
+                    $sitemapAction,
+                    CreatePageAction::make()
+                        ->redirectAfterCreate(),
+                    ReplicatePageAction::make(),
+                    RevisionsHeaderAction::make(),
+                ])))->dropdown(false),
+                ActionGroup::make([
+                    FrontendResourceDiagnosticsHeaderAction::make(),
+                    FrontendSourceMapHeaderAction::make(),
+                ])->dropdown(false),
+                ActionGroup::make([
+                    $this->deletePageAction(),
+                    ForceDeleteAction::make()
+                        ->icon('heroicon-m-trash'),
+                ])->dropdown(false),
             ])
-                ->label(__('capell-admin::button.advanced'))
+                ->label(__('capell-admin::button.more'))
+                ->icon('heroicon-m-ellipsis-vertical')
                 ->button()
                 ->color('gray')
                 ->dropdownPlacement('bottom-end'),
@@ -752,7 +750,7 @@ class EditPage extends EditRecord implements HasPageResource, ValidatesDelete
     protected function getPositionedFormActions(): array
     {
         return array_values([
-            $this->getSaveAndPublishFormAction(),
+            $this->getPageSaveFormAction(),
             ...$this->getPageEditExtenderFormActions(),
             $this->getCancelFormAction(),
         ]);
@@ -764,22 +762,45 @@ class EditPage extends EditRecord implements HasPageResource, ValidatesDelete
     protected function getPositionedHeaderFormActions(): array
     {
         return array_values([
-            $this->getSaveAndPublishFormAction()
-                ->submit(null)
-                ->action(function (): void {
-                    $this->save();
-                }),
+            $this->getPageSaveFormAction(),
             ...$this->getPageEditExtenderFormActions(),
             $this->getCancelFormAction(),
         ]);
     }
 
-    protected function getSaveAndPublishFormAction(): Action
+    protected function getPageSaveFormAction(): Action
     {
         return $this->getSaveFormAction()
-            ->label(fn (): string => $this->isLivePublishedRecord()
-                ? __('capell-admin::button.save')
-                : __('capell-admin::button.save_and_publish'));
+            ->label(__('capell-admin::button.save'))
+            ->submit(null)
+            ->action(function (): void {
+                $this->save();
+            })
+            ->modalHidden(fn (): bool => ! $this->saveAffectsOtherContent())
+            ->modalHeading(__('capell-admin::impact.heading'))
+            ->modalDescription(__('capell-admin::impact.description'))
+            ->modalContent(function (): ViewContract {
+                /** @var view-string $view */
+                $view = 'capell-admin::filament.forms.record-impact-preview';
+
+                return view($view, ['record' => $this->record]);
+            })
+            ->modalSubmitActionLabel(__('capell-admin::impact.confirm'));
+    }
+
+    /**
+     * Saving opens the impact confirmation only when other content or public
+     * URLs depend on this page; an isolated page saves straight away.
+     */
+    protected function saveAffectsOtherContent(): bool
+    {
+        if (! Gate::allows('update', $this->record)) {
+            return false;
+        }
+
+        $impact = BuildRecordImpactPreviewAction::run($this->record);
+
+        return $impact !== null && $impact->groups !== [];
     }
 
     /**
@@ -813,7 +834,9 @@ class EditPage extends EditRecord implements HasPageResource, ValidatesDelete
                 ->tooltip(__('capell-admin::button.save_as_draft_tooltip'))
                 ->icon('heroicon-o-document-text')
                 ->color('gray')
-                ->visible(fn (): bool => ! $this->isLivePublishedRecord())
+                // Without a workspace draft handler, a draft save is the same as the
+                // primary Save, so only offer the separate action when it does more.
+                ->visible(fn (): bool => $this->draftHandler() !== null && ! $this->isLivePublishedRecord())
                 ->action(function (): void {
                     $this->saveAsDraft();
                 }),

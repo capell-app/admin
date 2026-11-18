@@ -3,7 +3,7 @@
 declare(strict_types=1);
 
 return [
-    'title' => 'Theme Library',
+    'title' => 'Theme library',
     'subheading' => 'Customise, preview, and apply installed themes from one workflow.',
     'sections' => [
         'installed' => 'Installed themes',
@@ -18,6 +18,7 @@ return [
         'missing_presets' => 'Theme definition has no presets.',
         'missing_preview_image' => 'Theme definition has no preview image.',
         'missing_assets' => 'Theme does not declare frontend assets: :assets.',
+        'unknown_fonts' => 'Preset [:preset] uses fonts that are not in the font catalogue: :fonts. Choose catalogue fonts so the preset does not fall back to the default face.',
     ],
     'filters' => [
         'all' => 'All themes',

@@ -5,11 +5,11 @@ declare(strict_types=1);
 namespace Capell\Admin\Filament\Plugin;
 
 use BezhanSalleh\FilamentShield\FilamentShieldPlugin;
-use Capell\Admin\Actions\ResolveAdminHelpAction;
 use Capell\Admin\Data\AdminSurfaceContributionData;
 use Capell\Admin\Data\AdminWorkspaceItemData;
 use Capell\Admin\Enums\AdminWorkspaceEnum;
 use Capell\Admin\Enums\ConfiguratorTypeEnum;
+use Capell\Admin\Enums\NavigationGroupEnum;
 use Capell\Admin\Enums\ResourceEnum;
 use Capell\Admin\Enums\TransferDownloadEnum;
 use Capell\Admin\Exceptions\PanelTopologyRefreshRequiredException;
@@ -17,6 +17,8 @@ use Capell\Admin\Facades\CapellAdmin;
 use Capell\Admin\Filament\Actions\CreateAction;
 use Capell\Admin\Filament\AvatarProviders\InlineSvgAvatarProvider;
 use Capell\Admin\Filament\Pages\AbstractPackageSettingsPage;
+use Capell\Admin\Filament\Pages\Auth\AcceptInvitation;
+use Capell\Admin\Filament\Pages\RecentlyDeletedPage;
 use Capell\Admin\Filament\Pages\SiteHealthPage;
 use Capell\Admin\Filament\Resources\Pages\PageResource;
 use Capell\Admin\Filament\Resources\Roles\RoleResource;
@@ -29,14 +31,13 @@ use Capell\Admin\Providers\AdminServiceProvider;
 use Capell\Admin\Support\Install\AdminInstallState;
 use Capell\Admin\Support\InstalledPanelRuntime;
 use Capell\Admin\Support\Loader\SiteLoader;
-use Capell\Admin\Support\Navigation\WorkspaceNavigation;
 use Capell\Admin\Support\Navigation\WorkspaceNavigationManager;
 use Capell\Core\Data\PackageData;
 use Capell\Core\Facades\CapellCore;
 use Capell\Core\Support\Packages\InstalledRuntimeLifecycle;
 use Closure;
-use CmsMulti\FilamentClearCache\FilamentClearCachePlugin;
 use Filament\Actions\Action;
+use Filament\Clusters\Cluster;
 use Filament\Contracts\Plugin;
 use Filament\Facades\Filament as FilamentFacade;
 use Filament\FilamentManager;
@@ -164,6 +165,8 @@ class CapellAdminPlugin implements Plugin
         $panel->authMiddleware(self::authMiddleware());
         // Filament's global export and import downloads are served through the panel they were started in.
         $panel->authenticatedRoutes(TransferDownloadEnum::registerPanelRoutes(...));
+        // Invited people choose their password here before they have an account session.
+        $panel->routes(AcceptInvitation::registerInvitationRoute(...));
 
         $panel->renderHook(
             name: PanelsRenderHook::STYLES_BEFORE,
@@ -210,23 +213,10 @@ class CapellAdminPlugin implements Plugin
         });
 
         $panel->renderHook(
-            name: PanelsRenderHook::PAGE_HEADER_WIDGETS_BEFORE,
-            hook: function (): ?View {
-                $entry = ResolveAdminHelpAction::run();
-
-                return $entry === null ? null : view('capell-admin::components.admin-help', ['entry' => $entry]);
-            },
-        );
-
-        $panel->renderHook(
-            name: PanelsRenderHook::PAGE_HEADER_WIDGETS_BEFORE,
-            hook: function (): View {
-                FilamentFacade::getNavigation();
-
-                return view('capell-admin::components.workspace-navigation', [
-                    'navigation' => resolve(WorkspaceNavigation::class)->localNavigation(),
-                ]);
-            },
+            name: PanelsRenderHook::SIDEBAR_FOOTER,
+            hook: fn (): ?View => in_array(RecentlyDeletedPage::class, FilamentFacade::getCurrentPanel()?->getPages() ?? [], true) && RecentlyDeletedPage::canAccess()
+                ? view('capell-admin::components.sidebar-recently-deleted', ['url' => RecentlyDeletedPage::getUrl()])
+                : null,
         );
 
         $panel->renderHook(
@@ -242,16 +232,17 @@ class CapellAdminPlugin implements Plugin
             ->brandLogoHeight('2.2rem')
             ->defaultAvatarProvider(InlineSvgAvatarProvider::class)
             ->userMenuItems($this->getUserMenuItems())
+            // Everything sits before the search box: workspaces and tools first, then the site being edited.
+            ->renderHook(
+                name: PanelsRenderHook::GLOBAL_SEARCH_BEFORE,
+                hook: fn (): View => view($headerActionsView),
+            )
             ->renderHook(
                 name: PanelsRenderHook::GLOBAL_SEARCH_BEFORE,
                 hook: fn (): View => view(
                     $sitesView,
                     ['sites' => SiteLoader::getSites()],
                 ),
-            )
-            ->renderHook(
-                name: PanelsRenderHook::GLOBAL_SEARCH_AFTER,
-                hook: fn (): View => view($headerActionsView),
             )
             ->renderHook(
                 name: PanelsRenderHook::SIDEBAR_NAV_START,
@@ -357,7 +348,7 @@ class CapellAdminPlugin implements Plugin
             workspaces: [AdminWorkspaceEnum::Editor],
             roles: [$this->workspaceRole('editor')],
             permission: ResourceEnum::Page->permission('view_any'),
-            description: static fn (Authenticatable $actor): string => (string) __('capell-admin::generic.no_pages_description'),
+            description: static fn (Authenticatable $actor): string => (string) __('capell-admin::workspace.tool_descriptions.pages'),
             icon: Heroicon::OutlinedDocumentText,
             sort: 10,
         ));
@@ -386,7 +377,7 @@ class CapellAdminPlugin implements Plugin
         if (! $panel->hasPlugin('filament-shield')) {
             $panel->plugin(
                 FilamentShieldPlugin::make()
-                    ->navigationGroup(fn (): string => __('capell-admin::navigation.group_users'))
+                    ->navigationGroup(NavigationGroupEnum::Users)
                     ->navigationIcon(Heroicon::OutlinedKey)
                     ->activeNavigationIcon(Heroicon::Key)
                     ->navigationSort(4)
@@ -396,10 +387,6 @@ class CapellAdminPlugin implements Plugin
 
         if (! $panel->hasPlugin('spatie-laravel-translatable')) {
             $panel->plugin(SpatieTranslatablePlugin::make());
-        }
-
-        if (! $panel->hasPlugin('filament-clear-cache')) {
-            $panel->plugin(FilamentClearCachePlugin::make());
         }
 
         try {
@@ -529,7 +516,59 @@ class CapellAdminPlugin implements Plugin
     private function replacePanelResources(Panel $panel, array $resources): void
     {
         $panelResources = new ReflectionProperty($panel, 'resources');
+        $previous = array_values(array_unique($panelResources->getValue($panel)));
         $panelResources->setValue($panel, $resources);
+
+        // Panel::resources() would append rather than replace, so it cannot be used here.
+        // A cached component manifest already carries the cluster membership.
+        if (! $panel->hasCachedComponents()) {
+            $this->synchroniseResourceClusters($panel, $previous, $resources);
+        }
+    }
+
+    /**
+     * Keep Filament's cluster membership in step with a replaced resource list. Panel::resources()
+     * is the only thing that fills it, and Cluster::shouldRegisterNavigation() reads it, so a
+     * resource set directly on the panel would leave its cluster without navigation.
+     *
+     * @param  list<class-string<resource>>  $previous
+     * @param  list<class-string<resource>>  $resources
+     */
+    private function synchroniseResourceClusters(Panel $panel, array $previous, array $resources): void
+    {
+        $property = new ReflectionProperty($panel, 'clusteredComponents');
+
+        /** @var array<class-string, list<class-string>> $clustered */
+        $clustered = $property->getValue($panel);
+
+        foreach (array_diff($previous, $resources) as $removed) {
+            $cluster = $this->resourceCluster($removed);
+
+            if ($cluster !== null && isset($clustered[$cluster])) {
+                $clustered[$cluster] = array_values(array_diff($clustered[$cluster], [$removed]));
+            }
+        }
+
+        foreach ($resources as $resource) {
+            $cluster = $this->resourceCluster($resource);
+
+            if ($cluster !== null && ! in_array($resource, $clustered[$cluster] ?? [], true)) {
+                $clustered[$cluster][] = $resource;
+            }
+        }
+
+        $property->setValue($panel, $clustered);
+    }
+
+    /**
+     * @param  class-string<resource>  $resource
+     * @return class-string|null
+     */
+    private function resourceCluster(string $resource): ?string
+    {
+        $cluster = $resource::getCluster();
+
+        return is_string($cluster) && $cluster !== '' ? $cluster : null;
     }
 
     private function registerSettings(Panel $panel): self
@@ -606,7 +645,15 @@ class CapellAdminPlugin implements Plugin
                 && ! is_subclass_of($page, FilamentSettingsPage::class),
         ));
 
-        foreach ($pages as $page) {
+        // A cluster is a page with its own route that its resources link to, so it has to
+        // be on the panel before the panel routes are built, like every other package page.
+        $clusters = $this->discoverInstalledPackageFilamentClasses(
+            subPath: 'Filament/Clusters',
+            pattern: '*Cluster.php',
+            baseClass: Cluster::class,
+        );
+
+        foreach ([...$pages, ...$clusters] as $page) {
             CapellAdmin::contributeToAdminSurface(AdminSurfaceContributionData::page($page));
         }
 

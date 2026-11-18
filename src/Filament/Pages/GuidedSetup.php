@@ -1,0 +1,695 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Capell\Admin\Filament\Pages;
+
+use Capell\Admin\Actions\FirstRun\BuildGuidedSetupPreviewAction;
+use Capell\Admin\Filament\Resources\Sites\SiteResource;
+use Capell\Core\Actions\FirstRun\AttachGuidedSetupLogoAction;
+use Capell\Core\Actions\FirstRun\BuildGuidedSetupSpecAction;
+use Capell\Core\Actions\FirstRun\CompleteGuidedSetupAction;
+use Capell\Core\Actions\FirstRun\PublishGuidedSetupSiteAction;
+use Capell\Core\Actions\FirstRun\ResolveGuidedSetupStateAction;
+use Capell\Core\Actions\FirstRun\SkipGuidedSetupAction;
+use Capell\Core\Actions\GetEditPageResourceUrlAction;
+use Capell\Core\Contracts\Publishing\AuthorizesPublicationTransition;
+use Capell\Core\Data\FirstRun\GuidedSetupInputData;
+use Capell\Core\Data\FirstRun\GuidedSetupStateData;
+use Capell\Core\Data\Publishing\PublicationTransitionRequestData;
+use Capell\Core\Data\SiteSpec\SiteSpecPresetData;
+use Capell\Core\Enums\Publishing\PublicationTransition;
+use Capell\Core\Exceptions\GuidedSetupLogoNotAttachedException;
+use Capell\Core\Exceptions\GuidedSetupRefusedException;
+use Capell\Core\Exceptions\SiteSpecPublishRefusedException;
+use Capell\Core\Models\Page;
+use Capell\Core\Models\Site;
+use Capell\Core\Models\SiteDomain;
+use Capell\Core\Models\Theme;
+use Capell\Core\Support\FirstRun\GuidedSetupLogo;
+use Capell\Core\Support\Permissions\SiteAccess;
+use Capell\Core\Support\SiteSpec\SiteSpecApplierRegistry;
+use Capell\Core\Support\SiteSpec\SiteSpecPresetRegistry;
+use Carbon\CarbonImmutable;
+use Filament\Actions\Action;
+use Filament\Forms\Components\CheckboxList;
+use Filament\Forms\Components\ColorPicker;
+use Filament\Forms\Components\FileUpload;
+use Filament\Forms\Components\Radio;
+use Filament\Forms\Components\Select;
+use Filament\Forms\Components\TextInput;
+use Filament\Notifications\Notification;
+use Filament\Pages\Page as FilamentPage;
+use Filament\Schemas\Components\Text;
+use Filament\Schemas\Components\Wizard;
+use Filament\Schemas\Components\Wizard\Step;
+use Filament\Schemas\Schema;
+use Illuminate\Contracts\Support\Htmlable;
+use Livewire\Attributes\Locked;
+use Livewire\Features\SupportFileUploads\TemporaryUploadedFile;
+use Override;
+use RuntimeException;
+use Throwable;
+
+/**
+ * The first screen a new administrator sees: four short steps that turn an empty site into a
+ * private set of draft pages. It only gathers answers; the pages are written by the SiteSpec
+ * apply path in Core, and nothing is public until the person chooses to publish.
+ */
+class GuidedSetup extends FilamentPage
+{
+    /** @var array<string, mixed>|null */
+    public ?array $data = [];
+
+    /**
+     * Fixed when the page opens: finishing setup ends the state that found the site, so later requests keep this id.
+     * Locked so a browser cannot point the page at another site.
+     */
+    #[Locked]
+    public ?int $siteId = null;
+
+    #[Locked]
+    public bool $created = false;
+
+    #[Locked]
+    public int $createdPageCount = 0;
+
+    #[Locked]
+    public ?string $homeUrl = null;
+
+    #[Locked]
+    public bool $sitePublished = false;
+
+    /** The site was published but the logo held back since setup is still waiting to be attached. */
+    #[Locked]
+    public bool $logoPending = false;
+
+    protected static bool $shouldRegisterNavigation = false;
+
+    protected static ?string $slug = 'setup';
+
+    protected string $view = 'capell-admin::filament.pages.guided-setup';
+
+    private ?Site $resolvedSite = null;
+
+    #[Override]
+    public static function canAccess(): bool
+    {
+        $actor = auth()->user();
+
+        if ($actor === null) {
+            return false;
+        }
+
+        // Still reachable after the pages are created, until they are published, so the person can finish,
+        // and after publishing while the logo setup held back is still waiting to be added.
+        $site = self::editableSite() ?? ResolveGuidedSetupStateAction::make()->awaitingPublication($actor) ?? self::siteWithPendingLogo();
+
+        return $site instanceof Site && SiteResource::canEdit($site);
+    }
+
+    /** The person's site that setup published without its logo, so adding the logo can be tried again. */
+    public static function siteWithPendingLogo(): ?Site
+    {
+        $actor = auth()->user();
+        $site = $actor === null ? null : SiteAccess::forActor($actor)->query(Site::class)->excludingPreview()->orderBy('id')->first();
+
+        return $site instanceof Site && AttachGuidedSetupLogoAction::pending($site) ? $site : null;
+    }
+
+    /** How many pages setup's Publish would put live: the placeholder home page and each created page nobody has touched. */
+    public static function publishablePageCount(Site $site): int
+    {
+        $home = ResolveGuidedSetupStateAction::placeholderHome($site) instanceof Page ? 1 : 0;
+
+        return $home + count(ResolveGuidedSetupStateAction::untouchedSetupPages($site));
+    }
+
+    /** Whether the person should be taken to setup now: it is owed (nothing created yet) and they may do it. */
+    public static function isOwed(): bool
+    {
+        $site = self::editableSite();
+
+        return $site instanceof Site && SiteResource::canEdit($site);
+    }
+
+    /** Whether the person may publish the pages setup created and still waiting: they are offered Publish on the dashboard. */
+    public static function mayPublishAwaitingSite(): bool
+    {
+        $actor = auth()->user();
+        $site = $actor === null ? null : ResolveGuidedSetupStateAction::make()->awaitingPublication($actor);
+        $home = $site instanceof Site ? SiteAccess::forActor($actor)->query(Page::class)->where('site_id', $site->getKey())->homePage()->first() : null;
+
+        return $site instanceof Site
+            && $home instanceof Page
+            && SiteResource::canEdit($site)
+            && resolve(AuthorizesPublicationTransition::class)->allows(new PublicationTransitionRequestData($home, PublicationTransition::PublishNow, $actor, CarbonImmutable::now()));
+    }
+
+    #[Override]
+    public static function getNavigationLabel(): string
+    {
+        return (string) __('capell-admin::setup.title');
+    }
+
+    /** The site guided setup is for: the first one the person can reach, so it matches the dashboard redirect. */
+    public static function editableSite(): ?Site
+    {
+        $actor = auth()->user();
+
+        if ($actor === null) {
+            return null;
+        }
+
+        $state = ResolveGuidedSetupStateAction::run($actor);
+
+        return $state->needsSetup && $state->siteId !== null ? SiteAccess::forActor($actor)->query(Site::class)->whereKey($state->siteId)->first() : null;
+    }
+
+    #[Override]
+    public function getTitle(): string|Htmlable
+    {
+        return __('capell-admin::setup.title');
+    }
+
+    public function mount(): void
+    {
+        abort_unless(static::canAccess(), 403);
+
+        $actor = auth()->user();
+        $awaiting = ! self::editableSite() instanceof Site && $actor !== null ? ResolveGuidedSetupStateAction::make()->awaitingPublication($actor) : null;
+        $pendingLogo = ! self::editableSite() instanceof Site && ! $awaiting instanceof Site ? self::siteWithPendingLogo() : null;
+        $site = self::editableSite() ?? $awaiting ?? $pendingLogo ?? abort(403);
+        $this->siteId = (int) $site->getKey();
+
+        if ($pendingLogo instanceof Site) {
+            // Published, but the logo could not be added: offer to add it again.
+            $this->finish($site, self::publishablePageCount($site));
+            $this->sitePublished = true;
+            $this->logoPending = true;
+        }
+
+        if ($awaiting instanceof Site) {
+            // Coming back after the pages were created: go straight to opening the homepage or publishing.
+            $this->finish($site, self::publishablePageCount($site));
+        }
+
+        $state = GuidedSetupStateData::forSite($site);
+        $presets = $this->presets();
+
+        $this->formSchema()->fill([
+            'presetKey' => $this->defaultPresetKey($presets, $state),
+            'siteName' => $site->name,
+            'tagline' => '',
+            'themeKey' => null,
+            'primaryColour' => null,
+            'pageSlugs' => [],
+            // The person setting up the site is the safest first guess for where enquiries should go.
+            'contactEmail' => is_string(data_get($actor, 'email')) ? data_get($actor, 'email') : null,
+        ]);
+        $this->selectAllPages();
+    }
+
+    public function form(Schema $schema): Schema
+    {
+        return $schema
+            ->statePath('data')
+            ->components([
+                Wizard::make([
+                    Step::make('business')
+                        ->label(__('capell-admin::setup.step_business'))
+                        ->schema([
+                            Radio::make('presetKey')
+                                ->label(__('capell-admin::setup.step_business'))
+                                ->hint(__('capell-admin::setup.business_help'))
+                                ->options(fn (): array => collect($this->presets())->mapWithKeys(fn (SiteSpecPresetData $preset): array => [$preset->key => $preset->label])->all())
+                                ->descriptions(fn (): array => collect($this->presets())->mapWithKeys(fn (SiteSpecPresetData $preset): array => [$preset->key => $preset->description])->all())
+                                ->live()
+                                ->afterStateUpdated(fn () => $this->selectAllPages())
+                                ->required(),
+                            TextInput::make('siteName')
+                                ->label(__('capell-admin::setup.site_name'))
+                                ->required()
+                                ->maxLength(255)
+                                ->live(onBlur: true),
+                            TextInput::make('tagline')
+                                ->label(__('capell-admin::setup.one_liner'))
+                                ->helperText(__('capell-admin::setup.one_liner_help'))
+                                ->maxLength(500)
+                                ->live(onBlur: true),
+                        ]),
+                    Step::make('look')
+                        ->label(__('capell-admin::setup.step_look'))
+                        ->schema([
+                            Select::make('themeKey')
+                                ->label(__('capell-admin::setup.theme'))
+                                ->helperText(__('capell-admin::setup.theme_help'))
+                                ->options(fn (): array => Theme::query()->whereNotNull('key')->orderBy('name')->pluck('name', 'key')->all())
+                                ->placeholder(fn (): string => (string) $this->site()->theme?->name)
+                                ->live(),
+                            ColorPicker::make('primaryColour')
+                                ->label(__('capell-admin::setup.colour'))
+                                ->helperText(__('capell-admin::setup.colour_help'))
+                                ->regex('/^#[0-9a-fA-F]{6}$/')
+                                ->live(onBlur: true),
+                            FileUpload::make('logo')
+                                ->label(__('capell-admin::setup.logo'))
+                                ->helperText(__('capell-admin::setup.logo_help'))
+                                ->image()
+                                ->acceptedFileTypes(['image/png', 'image/svg+xml'])
+                                ->disk(GuidedSetupLogo::DISK)
+                                ->directory(GuidedSetupLogo::DIRECTORY)
+                                ->visibility('private'),
+                        ]),
+                    Step::make('pages')
+                        ->label(__('capell-admin::setup.step_pages'))
+                        ->schema([
+                            CheckboxList::make('pageSlugs')
+                                ->label(__('capell-admin::setup.step_pages'))
+                                ->helperText(__('capell-admin::setup.pages_help'))
+                                // Home is always created (see the help text), so it is not offered:
+                                // a checkbox for it could only ever look unticked.
+                                ->options(fn (): array => array_diff_key($this->pageOptions(), ['home' => true]))
+                                ->descriptions(fn (): array => $this->pageDescriptions())
+                                ->live(),
+                        ]),
+                    Step::make('review')
+                        ->label(__('capell-admin::setup.step_review'))
+                        ->schema([
+                            Text::make(fn (): string => $this->reviewBody()),
+                            Text::make(fn (): string => $this->contactFormPreview())
+                                ->visible(fn (): bool => $this->contactFormPreview() !== ''),
+                            TextInput::make('contactEmail')
+                                ->label(__('capell-admin::setup.contact_email'))
+                                ->helperText(__('capell-admin::setup.contact_email_help'))
+                                ->email()
+                                ->maxLength(255)
+                                ->visible(fn (): bool => $this->createsContactForm())
+                                ->required(fn (): bool => $this->createsContactForm()),
+                        ]),
+                ])
+                    ->submitAction(Action::make('createPages')
+                        ->label(__('capell-admin::setup.create_pages'))
+                        ->submit('createPages')
+                        ->color('primary'))
+                    ->skippable(false),
+            ]);
+    }
+
+    public function createPages(): void
+    {
+        $input = $this->input();
+        $site = $this->site();
+        $logo = $this->storedLogo();
+
+        try {
+            CompleteGuidedSetupAction::run($input, $site, $logo);
+        } catch (GuidedSetupRefusedException $refused) {
+            GuidedSetupLogo::discard($logo);
+            Notification::make()
+                ->danger()
+                ->title((string) __('capell-admin::setup.create_failed', ['reason' => match ($refused->reason) {
+                    GuidedSetupRefusedException::HAS_EXISTING_WORK => (string) __('capell-admin::setup.create_refused_has_existing_work'),
+                    default => (string) __('capell-admin::setup.create_refused_already_set_up'),
+                }]))
+                ->persistent()
+                ->send();
+
+            return;
+        } catch (Throwable $throwable) {
+            // The detail can hold internal text, so it goes to the log and the person gets what to do next.
+            report($throwable);
+            GuidedSetupLogo::discard($logo);
+            Notification::make()
+                ->danger()
+                ->title((string) __('capell-admin::setup.create_failed', ['reason' => (string) __('capell-admin::setup.create_failed_unknown')]))
+                ->persistent()
+                ->send();
+
+            return;
+        }
+
+        $this->finish($site, count($this->selectedSlugs()));
+    }
+
+    public function skip(): void
+    {
+        try {
+            SkipGuidedSetupAction::run($this->site());
+        } catch (GuidedSetupRefusedException) {
+            $this->redirect(CapellDashboard::getUrl(), navigate: false);
+
+            return;
+        }
+
+        Notification::make()->success()->title((string) __('capell-admin::setup.skipped'))->send();
+
+        $this->redirect(CapellDashboard::getUrl(), navigate: false);
+    }
+
+    public function publishAction(): Action
+    {
+        return Action::make('publish')
+            ->label(__('capell-admin::setup.publish_site'))
+            ->requiresConfirmation()
+            ->modalHeading(__('capell-admin::setup.publish_site'))
+            ->modalDescription(fn (): string => (string) __('capell-admin::setup.publish_confirm_body', [
+                'count' => $this->createdPageCount,
+                'url' => $this->publicUrl(),
+            ]))
+            ->modalSubmitActionLabel(__('capell-admin::setup.publish_site'))
+            ->visible(fn (): bool => $this->created && ! $this->sitePublished)
+            ->action(fn () => $this->publishSite());
+    }
+
+    /** Makes every page created by setup public, or says which page stopped it and leaves all of them private. */
+    public function publishSite(): void
+    {
+        $actor = auth()->user();
+        throw_if($actor === null, RuntimeException::class, 'A signed-in person is required to publish.');
+
+        // Only while this site's created pages are still waiting to be published, read from the database rather
+        // than the component state, so a replayed snapshot cannot republish pages after the site has gone live.
+        $awaiting = ResolveGuidedSetupStateAction::make()->awaitingPublication($actor);
+        abort_unless($awaiting instanceof Site && (int) $awaiting->getKey() === $this->siteId, 403);
+
+        $site = $this->site();
+
+        try {
+            PublishGuidedSetupSiteAction::run($site, $actor);
+        } catch (GuidedSetupRefusedException) {
+            // Already published, by this request's twin or another person.
+            abort(403);
+        } catch (GuidedSetupLogoNotAttachedException) {
+            $this->sitePublished = true;
+            $this->logoPending = true;
+            Notification::make()->warning()->title((string) __('capell-admin::setup.logo_not_attached'))->persistent()->send();
+
+            return;
+        } catch (SiteSpecPublishRefusedException $refused) {
+            Notification::make()
+                ->danger()
+                ->title((string) __('capell-admin::setup.publish_failed', ['page' => $refused->firstPageName() ?? (string) __('capell-admin::setup.step_pages')]))
+                ->persistent()
+                ->send();
+
+            return;
+        } catch (Throwable $throwable) {
+            report($throwable);
+            Notification::make()->danger()->title((string) __('capell-admin::setup.publish_error'))->persistent()->send();
+
+            return;
+        }
+
+        $this->sitePublished = true;
+        Notification::make()->success()->title((string) __('capell-admin::setup.published'))->send();
+    }
+
+    public function retryLogoAction(): Action
+    {
+        return Action::make('retryLogo')
+            ->label(__('capell-admin::setup.retry_logo'))
+            ->visible(fn (): bool => $this->logoPending)
+            ->action(fn () => $this->retryLogo());
+    }
+
+    /** Tries again to attach the logo setup held back, after publishing could not attach it. */
+    public function retryLogo(): void
+    {
+        $site = $this->site();
+        abort_unless(AttachGuidedSetupLogoAction::pending($site), 403);
+
+        try {
+            AttachGuidedSetupLogoAction::run($site);
+        } catch (Throwable $throwable) {
+            report($throwable);
+            Notification::make()->warning()->title((string) __('capell-admin::setup.logo_not_attached'))->persistent()->send();
+
+            return;
+        }
+
+        $this->logoPending = false;
+        Notification::make()->success()->title((string) __('capell-admin::setup.logo_attached'))->send();
+    }
+
+    /** @return list<SiteSpecPresetData> */
+    public function presets(): array
+    {
+        return resolve(SiteSpecPresetRegistry::class)->all();
+    }
+
+    /** @return array<string, string> slug => page name */
+    public function pageOptions(): array
+    {
+        $options = [];
+
+        foreach ($this->selectedPreset()?->spec['pages'] ?? [] as $page) {
+            if (is_array($page) && is_string($page['slug'] ?? null)) {
+                $options[$page['slug']] = (string) ($page['name'] ?? $page['slug']);
+            }
+        }
+
+        return $options;
+    }
+
+    /** @return array<string, string> */
+    public function pageDescriptions(): array
+    {
+        $descriptions = [];
+
+        foreach ($this->selectedPreset()?->spec['pages'] ?? [] as $page) {
+            if (is_array($page) && is_string($page['slug'] ?? null)) {
+                $descriptions[$page['slug']] = (string) ($page['description'] ?? '');
+            }
+        }
+
+        return $descriptions;
+    }
+
+    /** The frame gets only rendered site content, never a Livewire snapshot or an editor URL. */
+    public function previewHtml(): string
+    {
+        $preset = $this->selectedPreset();
+
+        if (! $preset instanceof SiteSpecPresetData) {
+            return '';
+        }
+
+        $colour = (string) ($this->data['primaryColour'] ?? '');
+        $themeKey = (string) ($this->data['themeKey'] ?? '');
+        $theme = $themeKey !== '' ? Theme::query()->where('key', $themeKey)->first() : null;
+        $name = trim((string) ($this->data['siteName'] ?? ''));
+
+        return BuildGuidedSetupPreviewAction::run(new GuidedSetupInputData(
+            presetKey: $preset->key,
+            siteName: $name !== '' ? mb_substr($name, 0, 255) : (string) __('capell-admin::setup.preview_empty_name'),
+            tagline: mb_substr((string) ($this->data['tagline'] ?? ''), 0, 500),
+            themeKey: $theme->key ?? $this->site()->theme?->key,
+            primaryColour: preg_match('/^#[0-9a-fA-F]{6}$/', $colour) === 1 ? $colour : null,
+            pageSlugs: $this->selectedSlugs(),
+        ), $this->site());
+    }
+
+    public function reviewBody(): string
+    {
+        $menu = resolve(SiteSpecApplierRegistry::class)->has('navigation');
+        $form = $this->createsContactForm();
+        $count = ['count' => count($this->selectedSlugs())];
+
+        return (string) match (true) {
+            $menu && $form => __('capell-admin::setup.review_body_menu_form', $count),
+            $menu => __('capell-admin::setup.review_body_menu', $count),
+            $form => __('capell-admin::setup.review_body_form', $count),
+            default => __('capell-admin::setup.review_body', $count),
+        };
+    }
+
+    /** Whether setup will create a contact form: the Form Builder extension is installed and a chosen page holds the preset's form. */
+    public function createsContactForm(): bool
+    {
+        return $this->contactForm() !== null;
+    }
+
+    /**
+     * What the contact form will ask visitors, so the person can check it before anything is created.
+     * Empty when setup creates no contact form or the form has no labelled fields.
+     */
+    public function contactFormPreview(): string
+    {
+        $form = $this->contactForm();
+
+        if ($form === null) {
+            return '';
+        }
+
+        $labels = [];
+
+        foreach (is_array($form['fields'] ?? null) ? $form['fields'] : [] as $field) {
+            if (is_array($field) && is_string($field['label'] ?? null) && trim($field['label']) !== '') {
+                $labels[] = trim($field['label']);
+            }
+        }
+
+        if ($labels === []) {
+            return '';
+        }
+
+        $page = is_string($form['placeOnPage'] ?? null) ? ($this->pageOptions()[$form['placeOnPage']] ?? $form['placeOnPage']) : null;
+
+        $fields = implode(', ', $labels);
+
+        if ($page === null) {
+            return (string) __('capell-admin::setup.contact_form_preview', ['fields' => $fields]);
+        }
+
+        return (string) __('capell-admin::setup.contact_form_preview_on_page', ['page' => $page, 'fields' => $fields]);
+    }
+
+    /** @return array<Action> */
+    #[Override]
+    protected function getHeaderActions(): array
+    {
+        return [
+            Action::make('skip')
+                ->label(__('capell-admin::setup.skip'))
+                ->color('gray')
+                ->visible(fn (): bool => ! $this->created)
+                ->action(fn () => $this->skip()),
+        ];
+    }
+
+    /**
+     * The preset's first contact form that setup will create, or null when the Form Builder
+     * extension is not installed or the page the form goes on was not chosen.
+     *
+     * @return array<array-key, mixed>|null
+     */
+    private function contactForm(): ?array
+    {
+        if (! resolve(SiteSpecApplierRegistry::class)->has(BuildGuidedSetupSpecAction::FORMS_KEY)) {
+            return null;
+        }
+
+        $forms = $this->selectedPreset()?->spec['packageData'][BuildGuidedSetupSpecAction::FORMS_KEY] ?? [];
+
+        foreach (is_array($forms) ? $forms : [] as $form) {
+            $page = is_array($form) ? ($form['placeOnPage'] ?? null) : null;
+
+            if (is_array($form) && (! is_string($page) || in_array($page, $this->selectedSlugs(), true))) {
+                return $form;
+            }
+        }
+
+        return null;
+    }
+
+    private function finish(Site $site, int $pageCount): void
+    {
+        $actor = auth()->user();
+        $home = $actor === null ? null : SiteAccess::forActor($actor)->query(Page::class)->where('site_id', $site->getKey())->homePage()->orderBy('id')->first();
+
+        $this->created = true;
+        $this->createdPageCount = $pageCount;
+        $this->homeUrl = $home instanceof Page ? GetEditPageResourceUrlAction::run($home) : null;
+    }
+
+    /** @return list<string> */
+    private function selectedSlugs(): array
+    {
+        return array_values(array_unique(['home', ...array_map(strval(...), (array) ($this->data['pageSlugs'] ?? []))]));
+    }
+
+    private function selectAllPages(): void
+    {
+        $this->data['pageSlugs'] = array_values(array_filter(array_keys($this->pageOptions()), static fn (string $slug): bool => $slug !== 'home'));
+    }
+
+    private function selectedPreset(): ?SiteSpecPresetData
+    {
+        $key = (string) ($this->data['presetKey'] ?? '');
+
+        return $key === '' ? null : resolve(SiteSpecPresetRegistry::class)->get($key);
+    }
+
+    private function input(): GuidedSetupInputData
+    {
+        $state = $this->formSchema()->getState();
+
+        return new GuidedSetupInputData(
+            presetKey: (string) ($state['presetKey'] ?? ''),
+            siteName: (string) ($state['siteName'] ?? ''),
+            tagline: (string) ($state['tagline'] ?? ''),
+            themeKey: filled($state['themeKey'] ?? null) ? (string) $state['themeKey'] : null,
+            primaryColour: filled($state['primaryColour'] ?? null) ? (string) $state['primaryColour'] : null,
+            pageSlugs: array_values(array_map(strval(...), (array) ($state['pageSlugs'] ?? []))),
+            contactEmail: $this->createsContactForm() && filled($state['contactEmail'] ?? null) ? (string) $state['contactEmail'] : null,
+        );
+    }
+
+    /**
+     * The uploaded logo's path on the guided setup logo disk, or null. Only a file this request
+     * uploaded, or the path the form stored it under, is used; GuidedSetupLogo refuses any path
+     * outside its directory, so a path written by the browser can never reach another file.
+     */
+    private function storedLogo(): ?string
+    {
+        $logo = $this->data['logo'] ?? null;
+        $logo = is_array($logo) ? (array_values($logo)[0] ?? null) : $logo;
+
+        if ($logo instanceof TemporaryUploadedFile) {
+            $logo = $logo->store(GuidedSetupLogo::DIRECTORY, GuidedSetupLogo::DISK);
+        }
+
+        return is_string($logo) && GuidedSetupLogo::path($logo) !== null ? $logo : null;
+    }
+
+    private function formSchema(): Schema
+    {
+        $schema = $this->getSchema('form');
+        throw_unless($schema instanceof Schema, RuntimeException::class, 'The guided setup form is unavailable.');
+
+        return $schema;
+    }
+
+    private function site(): Site
+    {
+        if (! $this->resolvedSite instanceof Site) {
+            $actor = auth()->user();
+            $site = $this->siteId === null || $actor === null ? null : SiteAccess::forActor($actor)->query(Site::class)->whereKey($this->siteId)->first();
+            abort_unless($site instanceof Site && SiteResource::canEdit($site), 403);
+            $this->resolvedSite = $site;
+        }
+
+        return $this->resolvedSite;
+    }
+
+    private function defaultDomainUrl(): string
+    {
+        $domain = $this->site()->defaultDomain;
+
+        return $domain instanceof SiteDomain ? $domain->full_url : (string) config('app.url');
+    }
+
+    private function publicUrl(): string
+    {
+        return $this->defaultDomainUrl();
+    }
+
+    /** @param list<SiteSpecPresetData> $presets */
+    private function defaultPresetKey(array $presets, GuidedSetupStateData $state): string
+    {
+        foreach ($presets as $preset) {
+            if ($state->suiteKey !== null && in_array($state->suiteKey, $preset->suiteKeys, true)) {
+                return $preset->key;
+            }
+        }
+
+        foreach ($presets as $preset) {
+            if ($preset->key === 'service-business') {
+                return $preset->key;
+            }
+        }
+
+        return $presets === [] ? '' : $presets[0]->key;
+    }
+}

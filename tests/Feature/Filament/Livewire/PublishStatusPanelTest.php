@@ -113,6 +113,18 @@ it('unpublishes a live page via the unpublish action', function (): void {
     expect($page->fresh()->isExpired())->toBeTrue();
 });
 
+it('explains the different outcomes of unpublishing and moving a live page back to draft', function (): void {
+    test()->actingAsAdmin();
+    $page = Page::factory()->create(['visible_from' => now()->subDay(), 'visible_until' => null]);
+
+    $unpublish = panelFor($page)->mountAction('unpublish')->instance()->getMountedAction()?->getModalDescription();
+    $draft = panelFor($page)->mountAction('revertToDraft')->instance()->getMountedAction()?->getModalDescription();
+
+    expect($unpublish)->toBe(__('capell-admin::message.unpublish_page_confirmation'))
+        ->and($draft)->toBe(__('capell-admin::publish_panel.switch_to_draft_confirmation'))
+        ->and($unpublish)->not->toBe($draft);
+});
+
 it('shows unpublish only for live pages', function (): void {
     test()->actingAsAdmin();
     $live = Page::factory()->create(['visible_from' => now()->subDay(), 'visible_until' => null]);
@@ -166,7 +178,7 @@ it('hides every management action from a user who cannot update the page', funct
         ->assertActionHidden('revertToDraft');
 });
 
-it('refreshes the existing panel when its parent saves and publishes without a reload', function (): void {
+it('refreshes the existing panel when its parent saves and then publishes from the panel without a reload', function (): void {
     test()->actingAsAdmin();
     $site = Site::factory()->hasSiteDomains()->create();
     $page = Page::factory()->site($site)->home()->create([
@@ -183,17 +195,22 @@ it('refreshes the existing panel when its parent saves and publishes without a r
     $panel = panelFor($page);
     $componentId = $panel->instance()->getId();
     expect($panel->instance()->viewData->isDraft())->toBeTrue();
-    $panel->assertSee(__('capell-admin::publish_panel.readiness_checks_passed'));
+    $panel->assertSee(__('capell-admin::publish_panel.readiness_ready'))
+        ->assertSee(__('capell-admin::publish_panel.summary_not_live'))
+        ->assertSee(__('capell-admin::publish_panel.check_live_not_verified'));
 
     Livewire::test(EditPage::class, ['record' => $page->getRouteKey()])
         ->call('save')
         ->assertHasNoFormErrors()
         ->assertDispatched('page-editor-saved', pageId: (int) $page->getKey());
 
-    expect($page->refresh()->publishVisibilityState()->value)->toBe('published');
+    expect($page->refresh()->publishVisibilityState()->value)->toBe('draft');
     $panel->dispatch('page-editor-saved', pageId: (int) $page->getKey())
-        ->assertSee(__('capell-admin::publish_panel.readiness_checks_passed'))
-        ->assertDontSee('Visible now');
+        ->assertSee(__('capell-admin::publish_panel.readiness_ready'))
+        ->callAction('publishNow')
+        ->assertSee(__('capell-admin::publish_panel.summary_stays_live'))
+        ->assertDontSee(__('capell-admin::publish_panel.summary_not_live'));
+    expect($page->refresh()->publishVisibilityState()->value)->toBe('published');
     expect($panel->instance()->getId())->toBe($componentId)
         ->and($panel->instance()->viewData->isLive())->toBeTrue()
         ->and($panel->instance()->readiness->publicEligible)->toBeTrue();
@@ -427,6 +444,6 @@ it('reports basic checks separately from the publication lifecycle', function (b
     expect($panel->instance()->readiness->blockingCheckIds)->toBe([])
         ->and($panel->instance()->readiness->publicEligible)->toBeFalse()
         ->and($panel->instance()->viewData->status)->toBe($scheduled ? PublishPanelStatusEnum::scheduled : PublishPanelStatusEnum::draft);
-    $panel->assertSee(__('capell-admin::publish_panel.readiness_checks_passed'))
-        ->assertDontSee(__('capell-admin::publish_panel.readiness_checks_incomplete'));
+    $panel->assertSee(__('capell-admin::publish_panel.readiness_ready'))
+        ->assertDontSee(trans_choice('capell-admin::publish_panel.readiness_to_fix', 1, ['count' => 1]));
 })->with([false, true]);

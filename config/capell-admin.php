@@ -22,6 +22,10 @@ $notificationEmails = array_values(array_filter(
 
 return [
     'dashboard' => [
+        // A site nobody has set up opens guided setup instead of the dashboard. Turn this off for provisioned sites.
+        'guided_setup' => [
+            'redirect' => env('CAPELL_GUIDED_SETUP_REDIRECT', true),
+        ],
         // Existing installations opt in explicitly; fresh-install wiring is separate.
         'work_first' => [
             'enabled' => env('CAPELL_WORK_FIRST_DASHBOARD', false),
@@ -257,5 +261,12 @@ return [
     'agent' => [
         // Admin agent tool invocations allowed per signed-in user per minute.
         'tool_invocations_per_minute' => (int) env('CAPELL_ADMIN_AGENT_TOOL_INVOCATIONS_PER_MINUTE', 30),
+    ],
+    'navigation' => [
+        // Sidebar limits, enforced by the navigation tests with every
+        // first-party package installed. Raising one is a reviewed decision.
+        'max_groups' => 9,
+        'max_items_per_group' => 10,
+        'min_items_per_group' => 2,
     ],
 ];

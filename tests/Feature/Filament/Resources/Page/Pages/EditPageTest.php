@@ -14,6 +14,7 @@ use Capell\Admin\Filament\Components\Forms\Page\ContentEditor;
 use Capell\Admin\Filament\Configurators\Pages\DefaultPageConfigurator;
 use Capell\Admin\Filament\Configurators\Pages\LandingPageConfigurator;
 use Capell\Admin\Filament\Configurators\Pages\ResultsPageConfigurator;
+use Capell\Admin\Filament\Livewire\PublishStatusPanel;
 use Capell\Admin\Filament\RelationManagers\ActivityHistoryRelationManager;
 use Capell\Admin\Filament\RelationManagers\EventSourcedHistoryRelationManager;
 use Capell\Admin\Filament\Resources\Pages\PageResource;
@@ -466,7 +467,7 @@ it('labels the primary save action as save for live published pages', function (
     expect(filamentText($saveAction->getLabel()))->toBe(__('capell-admin::button.save'));
 });
 
-it('labels the primary save action as save and publish for unpublished pages', function (): void {
+it('labels the primary save action as save for unpublished pages because publishing is a separate action', function (): void {
     $page = Page::factory()->createOne([
         'visible_from' => now()->addDay(),
         'visible_until' => null,
@@ -483,7 +484,7 @@ it('labels the primary save action as save and publish for unpublished pages', f
     expect($saveAction)->toBeInstanceOf(Action::class);
     assert($saveAction instanceof Action);
 
-    expect(filamentText($saveAction->getLabel()))->toBe(__('capell-admin::button.save_and_publish'));
+    expect(filamentText($saveAction->getLabel()))->toBe(__('capell-admin::button.save'));
 });
 
 // Unpublish / cancel-scheduled-unpublish moved off the EditPage form into the
@@ -747,7 +748,7 @@ it('shows the frontend source map header action', function (): void {
     $frontendSourceMapAction = $actionGroup->getFlatActions()['frontendSourceMap'];
 
     expect($actionGroup)->not->toBeNull()
-        ->and($actionGroup->getLabel())->toBe(__('capell-admin::button.advanced'))
+        ->and($actionGroup->getLabel())->toBe(__('capell-admin::button.more'))
         ->and(collect($actionGroup->getFlatActions())->keys()->all())->toContain('frontendSourceMap')
         ->and($frontendSourceMapAction->getLabel())->toBe(__('capell-admin::generic.frontend_source_map'))
         ->and($frontendSourceMapAction->getTooltip())->toBe(__('capell-admin::generic.frontend_source_map_description'))
@@ -774,7 +775,7 @@ it('shows the frontend resource diagnostics header action', function (): void {
     $frontendResourceDiagnosticsAction = $actionGroup->getFlatActions()['frontendResourceDiagnostics'];
 
     expect($actionGroup)->not->toBeNull()
-        ->and($actionGroup->getLabel())->toBe(__('capell-admin::button.advanced'))
+        ->and($actionGroup->getLabel())->toBe(__('capell-admin::button.more'))
         ->and(collect($actionGroup->getFlatActions())->keys()->all())->toContain('frontendResourceDiagnostics')
         ->and($frontendResourceDiagnosticsAction->getLabel())->toBe(__('capell-admin::generic.frontend_resource_diagnostics'))
         ->and($frontendResourceDiagnosticsAction->getTooltip())->toBe(__('capell-admin::generic.frontend_resource_diagnostics_description'))
@@ -1170,9 +1171,51 @@ it('save home page', function (): void {
         ->call('save')
         ->assertHasNoFormErrors();
 
-    // Saving a pending page is "Save and Publish": mutateFormDataBeforeSave clears
-    // the draft sentinel so the page goes live. Scheduling a future date is now the
-    // PublishStatusPanel's job, not the main form's.
+    // A plain Save keeps a draft a draft. Going live is the explicit Publish now
+    // action on the publish panel.
+    expect($page->refresh()->isPending())->toBeTrue();
+});
+
+it('keeps the draft visibility date when a draft page is saved with a plain save', function (): void {
+    $site = Site::factory()->hasSiteDomains()->create();
+    $languages = $site->siteDomains->map->language_id;
+
+    $page = Page::factory()->site($site)->pending()->create();
+    setupPage($page, $languages);
+    $draftVisibleFrom = $page->refresh()->visible_from;
+
+    Livewire::test(EditPage::class, [
+        'record' => $page->getRouteKey(),
+    ])
+        ->fillForm(['name' => 'Renamed draft'])
+        ->call('save')
+        ->assertHasNoFormErrors();
+
+    $page->refresh();
+
+    expect($page->name)->toBe('Renamed draft')
+        ->and($page->isPending())->toBeTrue()
+        ->and($page->visible_from?->equalTo($draftVisibleFrom))->toBeTrue();
+});
+
+it('still lets the explicit publish action take a saved draft live', function (): void {
+    $site = Site::factory()->hasSiteDomains()->create();
+    $languages = $site->siteDomains->map->language_id;
+
+    $page = Page::factory()->site($site)->pending()->create();
+    setupPage($page, $languages);
+
+    Livewire::test(EditPage::class, [
+        'record' => $page->getRouteKey(),
+    ])->call('save')->assertHasNoFormErrors();
+
+    expect($page->refresh()->isPending())->toBeTrue();
+
+    Livewire::test(PublishStatusPanel::class, [
+        'recordClass' => Page::class,
+        'recordId' => $page->getKey(),
+    ])->callAction('publishNow');
+
     expect($page->refresh()->isPending())->toBeFalse();
 });
 
@@ -1899,6 +1942,33 @@ it('hydrates stored blocks when the content structure changes so fields are keye
         ->and(array_values($blocks)[0]['data']['reference'])->toBe(FormattedFieldFilamentWidget::FORMATTED);
 });
 
+it('keeps unsaved translation edits when the content structure changes', function (): void {
+    resolve(WidgetDiscovery::class)->register(FormattedFieldFilamentWidget::class);
+    $language = Language::factory()->createOne();
+    $type = Blueprint::factory()->page()->contentStructure(ContentStructure::Blocks)->create();
+    $page = Page::factory()->recycle($language)->type($type)->create();
+    $translation = Translation::factory()
+        ->language($language)
+        ->translatable($page)
+        ->state([
+            'title' => 'Stored title',
+            'content' => [['type' => FormattedFieldFilamentWidget::getWidgetName(), 'data' => ['reference' => FormattedFieldFilamentWidget::STORED]]],
+        ])
+        ->create();
+    $rowPath = sprintf('translations.record-%d', $translation->getKey());
+
+    $component = Livewire::test(EditPage::class, ['record' => $page->getRouteKey()])
+        ->set('data.' . $rowPath . '.title', 'Unsaved title')
+        ->call('pageTypeContentStructureUpdated', ContentStructure::Blocks);
+
+    $blocks = array_values(data_get($component->instance()->data, $rowPath . '.content'));
+
+    expect(data_get($component->instance()->data, $rowPath . '.title'))->toBe('Unsaved title')
+        ->and($translation->refresh()->title)->toBe('Stored title')
+        ->and($blocks)->toHaveCount(1)
+        ->and($blocks[0]['data']['reference'])->toBe(FormattedFieldFilamentWidget::FORMATTED);
+});
+
 it('keeps blocks already in the editor as blocks when the content structure is confirmed', function (): void {
     resolve(WidgetDiscovery::class)->register(FormattedFieldFilamentWidget::class);
     $language = Language::factory()->createOne();
@@ -2140,3 +2210,22 @@ it('opens the Versions and Activity tabs from the edit screen tab link', functio
     'versions' => EventSourcedHistoryRelationManager::class,
     'activity' => ActivityHistoryRelationManager::class,
 ]);
+
+it('marks the page address with a globe icon and keeps its name for screen readers', function (): void {
+    test()->actingAsAdmin();
+    $page = Page::factory()->withTranslations()->createOne();
+
+    Livewire::test(EditPage::class, ['record' => $page->getRouteKey()])
+        ->assertSeeHtml('<span class="sr-only">' . e(__('capell-admin::form.page_address')) . '</span>');
+});
+
+it('groups secondary page actions, tools and delete under one More menu', function (): void {
+    test()->actingAsAdmin();
+    $page = Page::factory()->withTranslations()->createOne();
+
+    Livewire::test(EditPage::class, ['record' => $page->getRouteKey()])
+        ->assertSee(__('capell-admin::button.more'))
+        ->assertDontSee(__('capell-admin::button.advanced'))
+        ->assertActionExists('delete')
+        ->assertActionExists('frontendResourceDiagnostics');
+});

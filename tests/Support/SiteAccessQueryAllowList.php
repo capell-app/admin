@@ -46,11 +46,15 @@ final class SiteAccessQueryAllowList
                 'dashboardRecoveryState|$actor->newQuery()->whereKey($actor->getKey())->value(self::COLUMN)',
                 'dashboardLayout|$actor->newQuery()->whereKey($actor->getKey())->value(self::COLUMN)',
                 'dashboardOptions|$actor->newQuery()->whereKey($actor->getKey())->value(self::COLUMN)',
+                'firstRunChecklistHidden|$actor->newQuery()->whereKey($actor->getKey())->value(self::COLUMN)',
                 'merge|$actor->newQuery()->whereKey($actor->getKey())',
             ],
             // A media file is in use when any content, on any site, references it;
             // counting only the actor's visible sites would let the library trash
             // a file another site still displays.
+            // Existence only, to tell a deleted site from a site the owner may not import into; the
+            // permission check then runs in that site's permission scope.
+            'packages/admin/src/Actions/Transfers/EnsureImportOwnerAdmittedAction.php' => ['handle|' . Site::class . '::query()->whereKey((int) $siteId)->exists()'],
             'packages/admin/src/Actions/Media/RepairMediaHealthAction.php' => ['deleteUnused|$media->assetRelations()->exists()'],
             // Compensation checks the captured primary key for any surviving owner,
             // including a trashed row or an owner outside the actor's current grants.
@@ -62,7 +66,11 @@ final class SiteAccessQueryAllowList
             // Installation readiness is global; an actor with no site grants
             // must not be offered installation for an already installed CMS.
             'packages/admin/src/Filament/Pages/CapellDashboard.php' => ['getWidgets|' . Site::class . '::query()->exists()', 'dashboardEnum|' . Site::class . '::query()->exists()'],
-            'packages/admin/src/Filament/Resources/Pages/Pages/CreatePage.php' => ['mount|' . Site::class . '::query()->exists()'],
+            'packages/admin/src/Filament/Resources/Pages/Pages/CreatePage.php' => [
+                'mount|' . Site::class . '::query()->exists()',
+                // Filament's Livewire hydrate hook, not Model::hydrate(): it re-authorises the create page on every update.
+                'hydrate|parent::hydrate()',
+            ],
             // The status panel authorises the record through its registered view
             // policy instead of SiteAccess: a shared (no-site) record that a
             // package policy allows for a site editor must stay reachable, and a
@@ -76,6 +84,11 @@ final class SiteAccessQueryAllowList
             'packages/admin/src/Filament/Components/Forms/UserSelect.php' => ['setUp|$this->userModel()::query()->whereKey($value)->value(\'name\')', 'userQuery|$this->userModel()::query()->limit(10)'],
             // Role and permission definitions are installation-wide provisioning for
             // the acting guard; they hold no site content.
+            'packages/admin/src/Actions/GrantDeclaredPermissionRolesAction.php' => [
+                'handle|' . DB::class . '::table($table)->where(\'guard_name\', $guard)->pluck(\'package\', \'permission\')->all()',
+                'handle|' . DB::class . '::table($table)->insert([\'package\' => $package, \'permission\' => $permission->key, \'guard_name\' => $guard, \'granted_at\' => now()])',
+                'grant|$roleModel::query()->where(\'name\', $roleName)->where(\'guard_name\', $guard)->first()',
+            ],
             'packages/admin/src/Actions/AssignPermissionsToRole.php' => [
                 'grantSuperAdminPermissions|$permissionModel::query()->where(\'guard_name\', $guardName)->whereIn(\'name\', $permissions)->pluck($this->modelKeyName($permissionModel))->all()',
                 'grantSuperAdminPermissions|' . Utils::class . "::getRoleModel()::firstOrCreate(['name' => " . Utils::class . '::getSuperAdminName(), \'guard_name\' => $guardName, ' . Utils::class . '::getTenantModelForeignKey() => $tenantId])->permissions()->syncWithoutDetaching($permissionIds)',
@@ -101,6 +114,11 @@ final class SiteAccessQueryAllowList
             // User preferences and operation notification recipients are global
             // user data, not CMS records owned by a local site.
             'packages/admin/src/Actions/Notifications/ResolveDefaultPackageOperationRecipientsAction.php' => ['handle|$model->newQuery()->orderBy($model->qualifyColumn($model->getKeyName()))'],
+            // Email addresses identify one account across every site, so the invitation
+            // duplicate check must see every user.
+            'packages/admin/src/Actions/Users/InviteUserAction.php' => ['emailIsTaken|$userModel::query()->whereRaw(\'LOWER(email) = ?\', [mb_strtolower(trim($email))])->exists()'],
+            // Invitation tokens belong to an account, not to a site.
+            'packages/admin/src/Support/Users/InvitationPasswordBroker.php' => ['hasPendingInvitation|' . DB::class . '::table(self::table())->where(\'email\', $user->getEmailForPasswordReset())->exists()', 'revoke|' . DB::class . '::table($table)->where(\'email\', $user->getEmailForPasswordReset())->delete()'],
             'packages/admin/src/Actions/Users/ResolveAdminLocaleForUserAction.php' => ['handle|$user->newQuery()->whereKey($user->getKey())->value(\'preferred_admin_language_id\')'],
             'packages/admin/src/Actions/Users/ResolvePreferredAdminLanguageIdAction.php' => ['handle|$user->newQuery()->whereKey($user->getKey())->value(\'preferred_admin_language_id\')'],
             'packages/marketplace/src/Actions/ResolveMarketplaceInstallAttemptUserAction.php' => ['handle|$user->newQuery()->whereKey($attempt->user_id)->first()'],
@@ -171,11 +189,21 @@ final class SiteAccessQueryAllowList
                 // The settings repository table holds group payloads, not site-owned rows; the group was authorised upstream.
                 'lockWriteTargets|' . DB::class . '::table((string) (config(\'settings.repositories.database.table\') ?: \'settings\'))->where(\'group\', (string) ($invocation->payload[\'group\'] ?? \'\'))->lockForUpdate()->get()',
                 'lockWriteTargets|' . DB::class . ('::table(' . TableName::class . '::resolve(\'page_term\'))->where(\'page_id\', $pageId)->lockForUpdate()->get()')],
+            'packages/admin/src/Filament/Resources/Pages/PageResource.php' => [
+                // Filament's parent global-search query is already SiteAccess-scoped; these relations only hydrate the pages it returns.
+                'getGlobalSearchEloquentQuery|parent::getGlobalSearchEloquentQuery()->with([\'site:id,name,default,language_id\', \'translations\', \'blueprint:id,name\', \'ancestors\', \'pageUrls\'])->withCount([\'children\' => fn(Illuminate\Database\Eloquent\Builder $query): Illuminate\Database\Eloquent\Builder => ' . SiteAccess::class . '::current()->scope($query), \'pageUrls\'])',
+            ],
+            'packages/admin/src/Filament/Resources/Sites/SiteResource.php' => [
+                // Filament's parent global-search query is already SiteAccess-scoped; the translations only hydrate the sites it returns.
+                "getGlobalSearchEloquentQuery|parent::getGlobalSearchEloquentQuery()->with('translations')",
+            ],
             'packages/admin/src/Filament/Resources/Pages/Pages/EditPage.php' => [
                 // Filament resolves and authorises this page; its translations belong only to that page morph/key.
                 'pageTypeContentStructureUpdated|$this->record->translations',
                 // This is the parent-page relation of the page already resolved through PageResource and authorised by Filament.
                 'resolveRecord|$query->with([\'blueprint\', \'translations.language\'])',
+                // Filament's Livewire hydrate hook, not Model::hydrate(): it re-authorises the editor on every update.
+                'hydrate|parent::hydrate()',
             ],
             'packages/admin/src/Filament/Resources/Pages/Tables/PagesTable.php' => [
                 // The caller supplies the scoped PageResource query; translation predicates stay correlated to those pages.

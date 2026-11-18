@@ -1,4 +1,13 @@
 {
+    "create_admin_permission_default_grants_table": {
+        "names": [
+            "2026_11_15_000001_create_admin_permission_default_grants_table"
+        ],
+        "sha256": [
+            "8b1d785af844e0c47c582c77d924db7ec38afa88a8285be36f9a7b10cadd6db5",
+            "ef33fd804268a333da2703c99b3bf57c2a86bd279795fd392cdc6f9a1129f0d7"
+        ]
+    },
     "create_admin_transfer_origins_table": {
         "names": [
             "2026_11_04_000001_create_admin_transfer_origins_table"
@@ -14,6 +23,14 @@
         "sha256": [
             "b716c16fcc416c7854b9fe7e11120a72eb43e5caec9e63a85b3802b2eada4101",
             "e3e4f9e043451f3fb6929ba12fdeb7eb8178d463736abfebe37d7f52ca3125d1"
+        ]
+    },
+    "create_admin_user_invitation_tokens_table": {
+        "names": [
+            "2026_11_13_000001_create_admin_user_invitation_tokens_table"
+        ],
+        "sha256": [
+            "e2ae38d11e8cc138b7618372dff8fe89d513c0bda64eeed0e58abbd62b25fffc"
         ]
     },
     "create_ai_generation_histories_table": {
