@@ -1,8 +1,8 @@
 # Permissions & Approval
 
-Capell Admin ships with **site-scoped RBAC** on top of Spatie's `laravel-permission` package, plus **page-type role restrictions**. The workspace approval workflow is supplied by the optional `capell-app/publishing-studio` package and documented in [PublishingStudio & Versions](https://docs.capell.app/publishing-studio/#approval-lifecycle).
+Capell Admin ships with **site-scoped RBAC** on top of Spatie's `laravel-permission` package, plus **page-type role restrictions**. The workspace approval workflow is supplied by the optional `capell-app/publishing-studio` package and documented in [PublishingStudio & Versions](https://docs.capell.app/packages/publishing-studio/page-creation-and-approval-flow/).
 
-For an end-to-end walkthrough with a flow diagram and the email notifications sent at each transition, see [Page creation and approval flow](https://docs.capell.app/page-creation-and-approval-flow/) in the Publishing Studio docs.
+For an end-to-end walkthrough with a flow diagram and the email notifications sent at each transition, see [Page creation and approval flow](https://docs.capell.app/packages/publishing-studio/page-creation-and-approval-flow/) in the Publishing Studio docs.
 
 ---
 
@@ -24,7 +24,7 @@ Model: `Capell\Core\Models\PageRoleRestriction`.
 
 When `capell-app/publishing-studio` is installed, approvals are tracked at the **workspace** level, not per page. A workspace collects all edits that should ship together and moves through the state machine `open -> in_review -> approved -> publishing -> published`. `Capell\PublishingStudio\Models\WorkspaceApproval` is the immutable audit row for every submit, approve, reject, or request-changes event.
 
-See [PublishingStudio & Versions — Approval lifecycle](https://docs.capell.app/publishing-studio/#approval-lifecycle) for the full machine and the Filament actions that drive it.
+See [PublishingStudio & Versions — Approval lifecycle](https://docs.capell.app/packages/publishing-studio/page-creation-and-approval-flow/) for the full machine and the Filament actions that drive it.
 
 ## Policies
 
@@ -32,17 +32,17 @@ The default admin panel enables Filament strict authorisation. A resource with n
 
 Gate-based access control throughout the admin:
 
-| Policy                | Model (Shield subject) | Covers                                                                |
-| --------------------- | ---------------------- | --------------------------------------------------------------------- |
-| `PagePolicy`          | `Page`                 | view/create/update/delete/publish + page-type role restriction check  |
-| `SitePolicy`          | `Site`                 | view/manage sites and the Permissions relation manager                |
-| `LayoutPolicy`        | `Layout`               | layout access                                                         |
-| `MediaPolicy`         | `Media`                | media access                                                          |
-| `RedirectPolicy`      | `PageUrl`              | redirect CRUD + import/export gates (redirects are stored in PageUrl) |
-| `UserPolicy`          | user model             | user access and user management                                       |
-| `ActivityPolicy`      | `Activity`             | activity resource permissions                                         |
-| `BlockTemplatePolicy` | `BlockTemplate`        | block-template resource permissions                                   |
-| `RolePolicy`          | configured role model  | role resource permissions                                             |
+| Policy                | Model (Shield subject) | Covers                                                                                                                                                                                                    |
+| --------------------- | ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `PagePolicy`          | `Page`                 | view/create/update/delete/publish + page-type role restriction check                                                                                                                                      |
+| `SitePolicy`          | `Site`                 | view/manage sites and the Permissions relation manager                                                                                                                                                    |
+| `LayoutPolicy`        | `Layout`               | layout access                                                                                                                                                                                             |
+| `MediaPolicy`         | `Media`                | media access                                                                                                                                                                                              |
+| `RedirectPolicy`      | `PageUrl`              | redirect CRUD + import/export gates (redirects are stored in PageUrl); a page's own URLs follow the owning record's policy (`view` for viewing, `update` for editing, deleting, restoring or replicating) |
+| `UserPolicy`          | user model             | user access and user management                                                                                                                                                                           |
+| `ActivityPolicy`      | `Activity`             | activity resource permissions                                                                                                                                                                             |
+| `BlockTemplatePolicy` | `BlockTemplate`        | block-template resource permissions                                                                                                                                                                       |
+| `RolePolicy`          | configured role model  | role resource permissions                                                                                                                                                                                 |
 
 Navigation policies are package-owned by `capell-app/navigation`. Workspace policies and approval gates are package-owned by `capell-app/publishing-studio`.
 
