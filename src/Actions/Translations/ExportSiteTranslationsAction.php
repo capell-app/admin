@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Capell\Admin\Actions\Translations;
 
+use Capell\Admin\Support\Csv\CsvCell;
 use Capell\Core\Models\Contracts\Translatable;
 use Capell\Core\Models\Language;
 use Capell\Core\Models\Page;
@@ -11,8 +12,11 @@ use Capell\Core\Models\Site;
 use Capell\Core\Models\Translation;
 use Capell\Core\Support\Permissions\SiteAccess;
 use Generator;
+use Illuminate\Auth\Access\AuthorizationException;
+use Illuminate\Contracts\Auth\Access\Gate as GateContract;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Gate;
 use Lorisleiva\Actions\Concerns\AsFake;
 use Lorisleiva\Actions\Concerns\AsObject;
 use Symfony\Component\HttpFoundation\StreamedResponse;
@@ -53,6 +57,10 @@ class ExportSiteTranslationsAction
 
     public function handle(Site $site, ?Language $language = null): StreamedResponse
     {
+        // Refuse before the download starts: an exception thrown while the
+        // stream is already being written cannot become a clean 403.
+        $this->authorisedGate($site);
+
         $rows = $this->rows($site, $language);
 
         return response()->streamDownload(
@@ -104,6 +112,8 @@ class ExportSiteTranslationsAction
      */
     public function rows(Site $site, ?Language $language = null): Generator
     {
+        $gate = $this->authorisedGate($site);
+
         $targetLanguages = $this->targetLanguages($site, $language);
 
         if ($targetLanguages->isEmpty()) {
@@ -112,7 +122,7 @@ class ExportSiteTranslationsAction
 
         $defaultLanguage = $this->defaultLanguage();
 
-        foreach ($this->translatables($site) as $translatable) {
+        foreach ($this->translatables($site, $gate) as $translatable) {
             /** @var Collection<int, Translation> $translations */
             $translations = SiteAccess::current()->scope($translatable->translations()->getQuery())->get()->keyBy('language_id');
             $source = $defaultLanguage instanceof Language
@@ -130,14 +140,47 @@ class ExportSiteTranslationsAction
     }
 
     /**
+     * The export carries the full title, content and meta of every record, so it
+     * needs the page export ability on top of seeing the site, and each page is
+     * included only when the actor may view and export that page. That holds back
+     * pages whose blueprint is restricted to roles the actor does not have.
+     *
+     * @throws AuthorizationException
+     */
+    private function authorisedGate(Site $site): GateContract
+    {
+        $actor = auth()->user();
+
+        throw_unless($actor !== null, AuthorizationException::class);
+
+        $gate = Gate::forUser($actor);
+
+        throw_unless(
+            $gate->allows('export', Page::class) && $gate->allows('view', $site),
+            AuthorizationException::class,
+        );
+
+        return $gate;
+    }
+
+    /**
      * @return Generator<int, Model&Translatable>
      */
-    private function translatables(Site $site): Generator
+    private function translatables(Site $site, GateContract $gate): Generator
     {
         yield $site;
 
-        foreach (SiteAccess::current()->query(Page::class)->where('site_id', $site->id)->orderBy('id')->lazyById(self::CHUNK_SIZE) as $page) {
-            yield $page;
+        // Preload what the page policies read so the per-page checks add no queries.
+        $pages = SiteAccess::current()->query(Page::class)
+            ->where('site_id', $site->id)
+            ->with(['blueprint.roleRestrictions', 'site'])
+            ->orderBy('id')
+            ->lazyById(self::CHUNK_SIZE);
+
+        foreach ($pages as $page) {
+            if ($gate->allows('view', $page) && $gate->allows('export', $page)) {
+                yield $page;
+            }
         }
     }
 
@@ -176,7 +219,7 @@ class ExportSiteTranslationsAction
         ?Language $defaultLanguage,
         Language $targetLanguage,
     ): array {
-        return [
+        return array_map(CsvCell::neutralise(...), [
             $translatable->getMorphClass(),
             (string) $translatable->getKey(),
             $this->label($translatable),
@@ -189,7 +232,7 @@ class ExportSiteTranslationsAction
             $this->raw($target, 'title'),
             $this->raw($target, 'content'),
             $this->raw($target, 'meta'),
-        ];
+        ]);
     }
 
     private function label(Model $translatable): string
